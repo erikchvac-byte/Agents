@@ -12,6 +12,9 @@ import { SessionManager } from './agents/SessionManager';
 import { Router } from './agents/Router';
 import { MetaCoordinator } from './agents/MetaCoordinator';
 import { OllamaSpecialist } from './agents/OllamaSpecialist';
+import { ClaudeSpecialist } from './agents/ClaudeSpecialist';
+import { Critic } from './agents/Critic';
+import { Architect } from './agents/Architect';
 import * as path from 'path';
 
 export interface PipelineResult {
@@ -22,6 +25,16 @@ export interface PipelineResult {
   output: string;
   error?: string;
   totalDuration: number;
+  architecturalGuidance?: {
+    projectType: string;
+    recommendedPaths: number;
+    style: string;
+  };
+  review?: {
+    verdict: string;
+    issues: number;
+    summary: string;
+  };
 }
 
 export class Pipeline {
@@ -31,8 +44,18 @@ export class Pipeline {
   private router: Router;
   private metaCoordinator: MetaCoordinator;
   private ollamaSpecialist: OllamaSpecialist;
+  private claudeSpecialist: ClaudeSpecialist;
+  private critic: Critic;
+  private architect: Architect;
+  private enableCritic: boolean;
+  private enableArchitect: boolean;
 
-  constructor(workingDir: string = process.cwd()) {
+  constructor(
+    workingDir: string = process.cwd(),
+    useMCP: boolean = true,
+    enableCritic: boolean = true,
+    enableArchitect: boolean = true
+  ) {
     // Initialize infrastructure
     this.stateManager = new StateManager(
       path.join(workingDir, 'state', 'session_state.json')
@@ -46,7 +69,20 @@ export class Pipeline {
     // Initialize agents
     this.router = new Router(this.stateManager, this.logger);
     this.metaCoordinator = new MetaCoordinator(this.stateManager, this.logger);
-    this.ollamaSpecialist = new OllamaSpecialist(this.stateManager, this.logger);
+    this.ollamaSpecialist = new OllamaSpecialist(
+      this.stateManager,
+      this.logger,
+      useMCP
+    );
+    this.claudeSpecialist = new ClaudeSpecialist(
+      this.stateManager,
+      this.logger,
+      !useMCP // Use simulation when MCP is disabled (for tests)
+    );
+    this.critic = new Critic(this.stateManager);
+    this.architect = new Architect(workingDir, this.stateManager);
+    this.enableCritic = enableCritic;
+    this.enableArchitect = enableArchitect;
   }
 
   /**
@@ -69,7 +105,17 @@ export class Pipeline {
         `[Pipeline] Complexity: ${complexityAnalysis.complexity} (score: ${complexityAnalysis.score})`
       );
 
-      // Step 3: Meta-Coordinator routes to execution agent
+      // Step 3: Architect analyzes project structure (if enabled and complex task)
+      let architecturalDesign;
+      if (this.enableArchitect && complexityAnalysis.complexity === 'complex') {
+        console.log('[Pipeline] Analyzing project architecture...');
+        architecturalDesign = await this.architect.analyzeProject();
+        console.log(
+          `[Pipeline] Architecture: ${architecturalDesign.projectType} (${architecturalDesign.architecturalStyle})`
+        );
+      }
+
+      // Step 4: Meta-Coordinator routes to execution agent
       const routingDecision = await this.metaCoordinator.route(
         task,
         complexityAnalysis.complexity
@@ -78,21 +124,40 @@ export class Pipeline {
         `[Pipeline] Routed to: ${routingDecision.targetAgent} (${routingDecision.reason})`
       );
 
-      // Step 4: Execute with appropriate agent
+      // Step 5: Execute with appropriate agent
       let executionResult;
 
       if (routingDecision.targetAgent === 'ollama-specialist') {
         executionResult = await this.ollamaSpecialist.execute(task);
+      } else if (routingDecision.targetAgent === 'claude-specialist') {
+        executionResult = await this.claudeSpecialist.execute(task);
       } else {
-        // For MVP, we only have Ollama implemented
-        // Claude would be added here in future
+        // Fallback to Ollama for unknown agents
         console.log(
-          '[Pipeline] Claude not implemented yet, falling back to Ollama'
+          `[Pipeline] Unknown agent ${routingDecision.targetAgent}, falling back to Ollama`
         );
         executionResult = await this.ollamaSpecialist.execute(task);
       }
 
-      // Step 5: Compile result
+      // Step 6: Review code with Critic (if enabled and execution succeeded)
+      let reviewResult;
+      if (this.enableCritic && executionResult.success) {
+        console.log('[Pipeline] Reviewing code with Critic...');
+        const codeDiff = [
+          {
+            file: 'generated_code.ts',
+            additions: executionResult.output.split('\n'),
+            deletions: [],
+            context: task,
+          },
+        ];
+        reviewResult = await this.critic.reviewCode(codeDiff, task);
+        console.log(
+          `[Pipeline] Critic verdict: ${reviewResult.verdict} (${reviewResult.issues.length} issues)`
+        );
+      }
+
+      // Step 7: Compile result
       const result: PipelineResult = {
         success: executionResult.success,
         task,
@@ -101,13 +166,27 @@ export class Pipeline {
         output: executionResult.output,
         error: executionResult.error,
         totalDuration: Date.now() - startTime,
+        architecturalGuidance: architecturalDesign
+          ? {
+              projectType: architecturalDesign.projectType,
+              recommendedPaths: architecturalDesign.recommendedFileStructure.length,
+              style: architecturalDesign.architecturalStyle,
+            }
+          : undefined,
+        review: reviewResult
+          ? {
+              verdict: reviewResult.verdict,
+              issues: reviewResult.issues.length,
+              summary: reviewResult.summary,
+            }
+          : undefined,
       };
 
       console.log(
         `[Pipeline] Execution ${result.success ? 'succeeded' : 'failed'} in ${result.totalDuration}ms`
       );
 
-      // Step 6: Update session
+      // Step 8: Update session
       if (result.success) {
         await this.sessionManager.addAccomplishment(task);
       } else {

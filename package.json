@@ -9,6 +9,7 @@
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "mvp": "ts-node run-mvp.ts",
+    "demo": "ts-node run-full-pipeline.ts",
     "session:start": "ts-node agents/SessionManager.ts start",
     "session:end": "ts-node agents/SessionManager.ts end",
     "watcher:start": "ts-node agents/Watcher.ts start",
@@ -37,6 +38,7 @@
   },
   "dependencies": {
     "chokidar": "^3.5.3",
+    "dotenv": "^17.2.3",
     "uuid": "^9.0.1"
   }
 }

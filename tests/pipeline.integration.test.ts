@@ -24,8 +24,8 @@ describe('Pipeline Integration Test', () => {
     await fs.mkdir(path.join(tempDir, 'state'), { recursive: true });
     await fs.mkdir(path.join(tempDir, 'logs'), { recursive: true });
 
-    // Initialize pipeline with temp directory
-    pipeline = new Pipeline(tempDir);
+    // Initialize pipeline with temp directory, MCP disabled, Critic disabled, Architect disabled for testing
+    pipeline = new Pipeline(tempDir, false, false, false); // useMCP = false, enableCritic = false, enableArchitect = false for deterministic tests
   });
 
   afterEach(async () => {

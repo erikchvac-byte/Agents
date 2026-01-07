@@ -14,7 +14,9 @@
       "Bash(git push:*)",
       "Bash(find:*)",
       "Bash(wc:*)",
-      "Bash(npm run mvp:*)"
+      "Bash(npm run mvp:*)",
+      "Bash(npm run demo:*)",
+      "Bash(cat:*)"
     ]
   }
 }
