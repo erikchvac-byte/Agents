@@ -12,7 +12,7 @@ import { SessionManager } from './agents/SessionManager';
 import { Router } from './agents/Router';
 import { MetaCoordinator } from './agents/MetaCoordinator';
 import { OllamaSpecialist } from './agents/OllamaSpecialist';
-import { ClaudeSpecialist } from './agents/ClaudeSpecialist';
+import { ClaudeSpecialist, ExecutionMode } from './agents/ClaudeSpecialist';
 import { Critic } from './agents/Critic';
 import { Architect } from './agents/Architect';
 import * as path from 'path';
@@ -54,7 +54,8 @@ export class Pipeline {
     workingDir: string = process.cwd(),
     useMCP: boolean = true,
     enableCritic: boolean = true,
-    enableArchitect: boolean = true
+    enableArchitect: boolean = true,
+    claudeMode: ExecutionMode = 'vscode'
   ) {
     // Initialize infrastructure
     this.stateManager = new StateManager(
@@ -77,7 +78,7 @@ export class Pipeline {
     this.claudeSpecialist = new ClaudeSpecialist(
       this.stateManager,
       this.logger,
-      !useMCP // Use simulation when MCP is disabled (for tests)
+      !useMCP ? 'simulation' : claudeMode // Use simulation when MCP disabled (for tests)
     );
     this.critic = new Critic(this.stateManager);
     this.architect = new Architect(workingDir, this.stateManager);
