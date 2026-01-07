@@ -8,6 +8,7 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
+    "mvp": "ts-node run-mvp.ts",
     "session:start": "ts-node agents/SessionManager.ts start",
     "session:end": "ts-node agents/SessionManager.ts end",
     "watcher:start": "ts-node agents/Watcher.ts start",
