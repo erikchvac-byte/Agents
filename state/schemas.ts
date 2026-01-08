@@ -39,6 +39,8 @@ export interface SessionState {
   architectural_design: Record<string, any>;
   dependency_report: Record<string, any>;
   review_verdict: ReviewVerdict | null;
+  repair_attempts: number;
+  generated_files: string[];
   last_updated: string; // ISO 8601 timestamp
   agent_status: Record<string, AgentStatus>;
 }
@@ -88,10 +90,35 @@ export interface FailureEvent {
  */
 export interface FixEvent {
   timestamp: string; // ISO 8601 timestamp
-  agent: 'linter-fixer';
+  agent: 'repair-agent';
   original_issue: string;
   fix_applied: string;
   files_modified: string[];
+  review_verdict: ReviewVerdict;
+  attempt_number: number;
+}
+
+/**
+ * Generated file metadata
+ * Tracks files created/modified during execution
+ */
+export interface GeneratedFile {
+  path: string;
+  content: string;
+  operation: 'create' | 'update';
+  timestamp: string; // ISO 8601 timestamp
+}
+
+/**
+ * Result from execution agents (Claude/Ollama)
+ */
+export interface ExecutionResult {
+  success: boolean;
+  output: string;
+  error?: string;
+  duration_ms: number;
+  generatedFiles?: GeneratedFile[];
+  targetPath?: string;
 }
 
 /**
@@ -125,6 +152,8 @@ export const DEFAULT_SESSION_STATE: SessionState = {
   architectural_design: {},
   dependency_report: {},
   review_verdict: null,
+  repair_attempts: 0,
+  generated_files: [],
   last_updated: new Date().toISOString(),
   agent_status: {},
 };

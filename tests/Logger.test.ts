@@ -156,10 +156,12 @@ describe('Logger', () => {
     test('appends to applied_fixes.jsonl', async () => {
       const fix: FixEvent = {
         timestamp: new Date().toISOString(),
-        agent: 'linter-fixer',
+        agent: 'repair-agent',
         original_issue: 'Linting error',
         fix_applied: 'Added semicolon',
         files_modified: ['file1.ts', 'file2.ts'],
+        review_verdict: 'needs_repair',
+        attempt_number: 1,
       };
 
       await logger.logFix(fix);
@@ -171,8 +173,10 @@ describe('Logger', () => {
 
       const content = await fs.readFile(logFile, 'utf8');
       const parsed = JSON.parse(content.trim());
-      expect(parsed.agent).toBe('linter-fixer');
+      expect(parsed.agent).toBe('repair-agent');
       expect(parsed.files_modified).toHaveLength(2);
+      expect(parsed.review_verdict).toBe('needs_repair');
+      expect(parsed.attempt_number).toBe(1);
     });
   });
 

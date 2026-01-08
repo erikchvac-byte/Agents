@@ -11,19 +11,16 @@
 
 import { StateManager } from '../state/StateManager';
 import { Logger } from './Logger';
-
-export interface ExecutionResult {
-  success: boolean;
-  output: string;
-  error?: string;
-  duration_ms: number;
-}
+import { ExecutionResult, GeneratedFile } from '../state/schemas';
+import { parseFilePathFromTask, isPathSafe } from '../utils/filePathParser';
 
 export class ClaudeSpecialist {
   private logger: Logger;
+  private workingDir: string;
 
-  constructor(_stateManager: StateManager, logger: Logger) {
+  constructor(_stateManager: StateManager, logger: Logger, workingDir: string = process.cwd()) {
     this.logger = logger;
+    this.workingDir = workingDir;
 
     // Verify Task tool is available
     if (typeof (globalThis as any).Task !== 'function') {
@@ -44,6 +41,9 @@ export class ClaudeSpecialist {
     const startTime = Date.now();
 
     try {
+      // Parse target file path from task
+      const fileInfo = parseFilePathFromTask(task, this.workingDir);
+
       // Get Task function from global scope
       const TaskFn = (globalThis as any).Task;
 
@@ -53,12 +53,12 @@ export class ClaudeSpecialist {
         );
       }
 
-      // Spawn a claude-specialist sub-agent for code generation
-      const result = await TaskFn({
-        subagent_type: 'claude-specialist',
-        prompt: `Generate production-ready TypeScript code for the following task:
+      // Construct enhanced prompt with file writing instructions
+      const prompt = `Generate production-ready TypeScript code for the following task:
 
 ${task}
+
+${fileInfo.targetPath ? `Target file: ${fileInfo.targetPath}` : 'Generate code without writing to disk yet.'}
 
 Requirements:
 - Use TypeScript strict mode
@@ -70,17 +70,44 @@ Requirements:
 - Include input validation where appropriate
 - Handle edge cases
 
-Return ONLY the code implementation with comments. Do not include explanations outside the code.`,
-        description: 'Generate code for complex task',
+${fileInfo.targetPath && fileInfo.confidence !== 'low' ? `
+IMPORTANT: You have access to Write and Edit tools. After generating the code:
+1. Write the code to ${fileInfo.targetPath} using the Write tool
+2. Ensure proper directory structure exists
+3. Include the file path in your response
+` : ''}
+
+Return the code implementation with comments.`;
+
+      // Spawn a claude-specialist sub-agent for code generation
+      const result = await TaskFn({
+        subagent_type: 'claude-specialist',
+        prompt,
+        description: 'Generate and write code for complex task',
         model: 'sonnet', // Use Sonnet for deep reasoning
       });
 
       const output = result.output || result.toString();
 
+      // Parse generated files from result
+      const generatedFiles: GeneratedFile[] = [];
+
+      // If file path was provided and confidence is high, record it
+      if (fileInfo.targetPath && fileInfo.confidence === 'high' && isPathSafe(fileInfo.targetPath, this.workingDir)) {
+        generatedFiles.push({
+          path: fileInfo.targetPath,
+          content: output,
+          operation: fileInfo.operation,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       return {
         success: true,
         output,
         duration_ms: Date.now() - startTime,
+        generatedFiles,
+        targetPath: fileInfo.targetPath || undefined,
       };
     } catch (error) {
       const errorMessage =

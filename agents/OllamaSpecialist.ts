@@ -11,17 +11,14 @@
 
 import { StateManager } from '../state/StateManager';
 import { Logger } from './Logger';
+import { ExecutionResult, GeneratedFile } from '../state/schemas';
+import { parseFilePathFromTask, isPathSafe } from '../utils/filePathParser';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
-
-export interface ExecutionResult {
-  success: boolean;
-  output: string;
-  error?: string;
-  duration_ms: number;
-}
 
 // Type definition for MCP Ollama query function
 // This is a placeholder - in runtime, Claude Code provides this via MCP
@@ -41,11 +38,13 @@ export class OllamaSpecialist {
   private ollamaAvailable: boolean = false;
   private model: string;
   private useMCP: boolean = true; // Flag to toggle MCP usage
+  private workingDir: string;
 
-  constructor(stateManager: StateManager, logger: Logger, useMCP: boolean = true) {
+  constructor(stateManager: StateManager, logger: Logger, useMCP: boolean = true, workingDir: string = process.cwd()) {
     this.stateManager = stateManager;
     this.logger = logger;
     this.useMCP = useMCP;
+    this.workingDir = workingDir;
     this.model = process.env.OLLAMA_MODEL || 'qwen3-coder:30b';
   }
 
@@ -87,13 +86,46 @@ export class OllamaSpecialist {
         throw new Error('Ollama is not available');
       }
 
+      // Parse target file path from task
+      const fileInfo = parseFilePathFromTask(task, this.workingDir);
+
       // Call real Ollama via MCP or fallback to simulation
       const output = await this.executeWithOllama(task);
+
+      // Write files if path was provided with high confidence
+      const generatedFiles: GeneratedFile[] = [];
+
+      if (fileInfo.targetPath && fileInfo.confidence === 'high' && isPathSafe(fileInfo.targetPath, this.workingDir)) {
+        try {
+          // Ensure directory exists
+          const dir = path.dirname(fileInfo.targetPath);
+          await fs.mkdir(dir, { recursive: true });
+
+          // Write file atomically (same pattern as StateManager)
+          const tempPath = fileInfo.targetPath + '.tmp';
+          await fs.writeFile(tempPath, output, 'utf8');
+          await fs.rename(tempPath, fileInfo.targetPath);
+
+          generatedFiles.push({
+            path: fileInfo.targetPath,
+            content: output,
+            operation: fileInfo.operation,
+            timestamp: new Date().toISOString(),
+          });
+
+          console.log(`[OllamaSpecialist] Wrote file: ${fileInfo.targetPath}`);
+        } catch (writeError) {
+          console.warn(`[OllamaSpecialist] Failed to write file:`, writeError);
+          // Don't fail the entire task if file write fails
+        }
+      }
 
       const result: ExecutionResult = {
         success: true,
         output,
         duration_ms: Date.now() - startTime,
+        generatedFiles,
+        targetPath: fileInfo.targetPath || undefined,
       };
 
       // Update state
