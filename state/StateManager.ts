@@ -1,5 +1,6 @@
 import { SessionState, DEFAULT_SESSION_STATE } from './schemas';
 import { promises as fs } from 'fs';
+import * as path from 'path';
 
 /**
  * StateManager - Single Source of Truth for system state
@@ -32,7 +33,9 @@ export class StateManager {
     try {
       await fs.access(this.statePath);
     } catch {
-      // File doesn't exist, create with defaults
+      // File doesn't exist, create directory and file with defaults
+      const stateDir = path.dirname(this.statePath);
+      await fs.mkdir(stateDir, { recursive: true });
       await this.writeState(DEFAULT_SESSION_STATE);
     }
   }

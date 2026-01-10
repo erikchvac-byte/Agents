@@ -22,6 +22,15 @@ export class Router {
   private stateManager: StateManager;
   private logger: Logger;
 
+  // Scoring constants
+  private readonly BASE_SCORE = 50;
+  private readonly KEYWORD_SCORE_ADJUSTMENT = 10;
+  private readonly LONG_DESCRIPTION_BONUS = 15;
+  private readonly SHORT_DESCRIPTION_PENALTY = 10;
+  private readonly COMPLEXITY_THRESHOLD = 60;
+  private readonly LONG_DESCRIPTION_LENGTH = 200;
+  private readonly SHORT_DESCRIPTION_LENGTH = 50;
+
   // Keywords indicating complexity
   private readonly COMPLEX_KEYWORDS = [
     'refactor',
@@ -55,6 +64,51 @@ export class Router {
   }
 
   /**
+   * Calculate score adjustments based on keyword matching
+   * @param taskLower Lowercase task description
+   * @param factors Array to collect scoring factors
+   * @returns Score adjustment amount
+   */
+  private calculateKeywordScore(taskLower: string, factors: string[]): number {
+    let adjustment = 0;
+
+    // Check for complex indicators
+    for (const keyword of this.COMPLEX_KEYWORDS) {
+      if (taskLower.includes(keyword)) {
+        adjustment += this.KEYWORD_SCORE_ADJUSTMENT;
+        factors.push(`Complex keyword: ${keyword}`);
+      }
+    }
+
+    // Check for simple indicators
+    for (const keyword of this.SIMPLE_KEYWORDS) {
+      if (taskLower.includes(keyword)) {
+        adjustment -= this.KEYWORD_SCORE_ADJUSTMENT;
+        factors.push(`Simple keyword: ${keyword}`);
+      }
+    }
+
+    return adjustment;
+  }
+
+  /**
+   * Calculate score adjustments based on task description length
+   * @param task Task description
+   * @param factors Array to collect scoring factors
+   * @returns Score adjustment amount
+   */
+  private calculateLengthScore(task: string, factors: string[]): number {
+    if (task.length > this.LONG_DESCRIPTION_LENGTH) {
+      factors.push('Long description');
+      return this.LONG_DESCRIPTION_BONUS;
+    } else if (task.length < this.SHORT_DESCRIPTION_LENGTH) {
+      factors.push('Short description');
+      return -this.SHORT_DESCRIPTION_PENALTY;
+    }
+    return 0;
+  }
+
+  /**
    * Analyze task complexity
    * @param task Task description
    * @returns Complexity analysis
@@ -64,40 +118,19 @@ export class Router {
     const taskLower = task.toLowerCase();
 
     try {
-      // Score based on keyword matching
-      let score = 50; // Base score
       const factors: string[] = [];
 
-      // Check for complex indicators
-      for (const keyword of this.COMPLEX_KEYWORDS) {
-        if (taskLower.includes(keyword)) {
-          score += 10;
-          factors.push(`Complex keyword: ${keyword}`);
-        }
-      }
-
-      // Check for simple indicators
-      for (const keyword of this.SIMPLE_KEYWORDS) {
-        if (taskLower.includes(keyword)) {
-          score -= 10;
-          factors.push(`Simple keyword: ${keyword}`);
-        }
-      }
-
-      // Length factor (longer descriptions often indicate complexity)
-      if (task.length > 200) {
-        score += 15;
-        factors.push('Long description');
-      } else if (task.length < 50) {
-        score -= 10;
-        factors.push('Short description');
-      }
+      // Calculate score from base + keyword matching + length
+      let score = this.BASE_SCORE;
+      score += this.calculateKeywordScore(taskLower, factors);
+      score += this.calculateLengthScore(task, factors);
 
       // Clamp score to 0-100
       score = Math.max(0, Math.min(100, score));
 
-      // Determine complexity (threshold at 60)
-      const complexity: TaskComplexity = score >= 60 ? 'complex' : 'simple';
+      // Determine complexity
+      const complexity: TaskComplexity =
+        score >= this.COMPLEXITY_THRESHOLD ? 'complex' : 'simple';
 
       const analysis: ComplexityAnalysis = {
         complexity,

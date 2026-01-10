@@ -201,10 +201,18 @@ export class Critic {
     const additions = diff.additions.join('\n');
 
     // Check for potential SQL injection
-    if (additions.includes('SELECT') && additions.includes('+')) {
+    // BUG-002 FIX: Detect template literals, concat, and join in addition to + operator
+    const hasSqlKeyword = additions.includes('SELECT') || additions.includes('INSERT') ||
+                          additions.includes('UPDATE') || additions.includes('DELETE');
+    const hasStringConcat = additions.includes('+') ||
+                            additions.match(/`.*\$\{.*\}.*`/) ||  // Template literals
+                            additions.includes('.concat(') ||
+                            additions.includes('.join(');
+
+    if (hasSqlKeyword && hasStringConcat) {
       concerns.push({
         type: 'injection',
-        description: 'Potential SQL injection vulnerability',
+        description: 'Potential SQL injection vulnerability (string concatenation with SQL keywords)',
         severity: 'critical',
         recommendation: 'Use parameterized queries or ORM',
       });
@@ -221,9 +229,12 @@ export class Critic {
     }
 
     // Check for hardcoded credentials
-    const credentialPatterns = ['password', 'api_key', 'secret', 'token'];
+    // BUG-003 FIX: Detect const/let/var declarations and export statements
+    const credentialPatterns = ['password', 'api_key', 'secret', 'token', 'apiKey', 'accessToken'];
     for (const pattern of credentialPatterns) {
-      if (additions.includes(`${pattern} = "`) || additions.includes(`${pattern} = '`)) {
+      // Match: password = "...", const password = "...", export const password = "..."
+      const regex = new RegExp(`(const|let|var|export\\s+const|export\\s+let|export\\s+var)?\\s*${pattern}\\s*=\\s*["']`, 'i');
+      if (regex.test(additions)) {
         concerns.push({
           type: 'credentials',
           description: `Potential hardcoded ${pattern}`,
@@ -317,9 +328,10 @@ export class Critic {
       return 'rejected';
     }
 
-    // Needs repair if high severity issues
+    // BUG-003 FIX: Check for high severity in BOTH issues AND securityConcerns
     const hasCriticalIssues = issues.some(i => i.severity === 'critical' || i.severity === 'high');
-    if (hasCriticalIssues) {
+    const hasHighSecurity = securityConcerns.some(c => c.severity === 'high');
+    if (hasCriticalIssues || hasHighSecurity) {
       return 'needs_repair';
     }
 

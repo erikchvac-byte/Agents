@@ -95,19 +95,14 @@ export class RoutingOptimizer {
    * @param decision Routing decision details
    */
   async logDecision(decision: RoutingDecision): Promise<void> {
+    if (!this.mcpAvailable) {
+      throw new Error(
+        'Ollama MCP not available. RoutingOptimizer requires MCP for routing decision logging. ' +
+        'Configure the Ollama MCP server in Claude Code settings.'
+      );
+    }
+
     try {
-      if (!this.mcpAvailable) {
-        // Fallback: log to local logger
-        await this.logger.logAgentActivity({
-          timestamp: decision.timestamp,
-          agent: 'routing-optimizer',
-          action: 'routing_decision',
-          input: decision,
-          output: { logged: true },
-          duration_ms: 0,
-        });
-        return;
-      }
 
       // Determine recommendation based on complexity score
       let recommendation: 'OLLAMA_ONLY' | 'OLLAMA_PREFERRED' | 'BOTH_CAPABLE' | 'CLAUDE_PREFERRED';
@@ -147,7 +142,6 @@ export class RoutingOptimizer {
         duration_ms: 0,
       });
     } catch (error) {
-      // Silent fallback - don't fail task if logging fails
       const errorMessage = error instanceof Error ? error.message : String(error);
       await this.logger.logFailure({
         timestamp: new Date().toISOString(),
@@ -166,10 +160,14 @@ export class RoutingOptimizer {
   async analyzeAndOptimize(): Promise<OptimizationResult> {
     const startTime = Date.now();
 
+    if (!this.mcpAvailable) {
+      throw new Error(
+        'Ollama MCP not available. RoutingOptimizer requires MCP for pattern analysis. ' +
+        'Configure the Ollama MCP server in Claude Code settings.'
+      );
+    }
+
     try {
-      if (!this.mcpAvailable) {
-        return await this.analyzeLocalFallback();
-      }
 
       const globalAny = globalThis as any;
 
@@ -273,98 +271,6 @@ export class RoutingOptimizer {
     }
   }
 
-  /**
-   * Fallback analysis using local logs when MCP unavailable
-   */
-  private async analyzeLocalFallback(): Promise<OptimizationResult> {
-    const startTime = Date.now();
-
-    try {
-      // Query local logs for routing decisions
-      const activities = await this.logger.queryLogs({
-        agent: 'routing-optimizer',
-      });
-
-      const decisions: RoutingDecision[] = activities
-        .filter((a: any) => a.action === 'routing_decision' && a.input)
-        .map((a: any) => a.input);
-
-      if (decisions.length < 10) {
-        // Insufficient data
-        return {
-          success: true,
-          analysis: {
-            totalDecisions: decisions.length,
-            ollamaSuccessRate: 0.95,
-            claudeSuccessRate: 0.98,
-            avgOllamaTime: 15,
-            avgClaudeTime: 300,
-            suggestedThreshold: RoutingOptimizer.COMPLEXITY_THRESHOLD,
-            confidence: 0.3,
-            recommendations: ['Insufficient data - need at least 20 routing decisions for meaningful analysis'],
-          },
-          duration_ms: Date.now() - startTime,
-        };
-      }
-
-      // Calculate metrics from local data
-      const ollamaDecisions = decisions.filter(d => d.chosenAgent === 'ollama-specialist');
-      const claudeDecisions = decisions.filter(d => d.chosenAgent === 'claude-specialist');
-
-      const ollamaSuccess = ollamaDecisions.filter(d => d.success).length;
-      const claudeSuccess = claudeDecisions.filter(d => d.success).length;
-
-      const ollamaSuccessRate = ollamaDecisions.length > 0 ? ollamaSuccess / ollamaDecisions.length : 0.95;
-      const claudeSuccessRate = claudeDecisions.length > 0 ? claudeSuccess / claudeDecisions.length : 0.98;
-
-      const avgOllamaTime =
-        ollamaDecisions.length > 0
-          ? ollamaDecisions.reduce((sum, d) => sum + d.executionTime, 0) / ollamaDecisions.length
-          : 15;
-
-      const avgClaudeTime =
-        claudeDecisions.length > 0
-          ? claudeDecisions.reduce((sum, d) => sum + d.executionTime, 0) / claudeDecisions.length
-          : 300;
-
-      // Simple threshold optimization: find score where success rates diverge
-      const recommendations: string[] = [];
-
-      if (ollamaSuccessRate < 0.9) {
-        recommendations.push('Ollama success rate is low - consider raising complexity threshold');
-      }
-
-      if (avgClaudeTime > 1000) {
-        recommendations.push('Claude tasks are slow - consider lowering threshold to use Ollama more');
-      }
-
-      const analysis: RoutingAnalysis = {
-        totalDecisions: decisions.length,
-        ollamaSuccessRate,
-        claudeSuccessRate,
-        avgOllamaTime,
-        avgClaudeTime,
-        suggestedThreshold: RoutingOptimizer.COMPLEXITY_THRESHOLD,
-        confidence: Math.min(decisions.length / 50, 0.8),
-        recommendations,
-      };
-
-      return {
-        success: true,
-        analysis,
-        duration_ms: Date.now() - startTime,
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      return {
-        success: false,
-        analysis: null,
-        duration_ms: Date.now() - startTime,
-        error: errorMessage,
-      };
-    }
-  }
 
   /**
    * Get current complexity threshold

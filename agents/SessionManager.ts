@@ -33,11 +33,11 @@ export class SessionManager {
       const content = await fs.readFile(this.summaryPath, 'utf8');
       const summary = JSON.parse(content) as SessionSummary;
 
-      console.log(`Resuming session ${summary.session_id}`);
-      console.log(`Previous session ended: ${summary.end_time || 'Still active'}`);
+      console.log(`[Jr] Resuming session ${summary.session_id}`);
+      console.log(`[Jr] Previous session ended: ${summary.end_time || 'Still active'}`);
 
       if (summary.incomplete_tasks.length > 0) {
-        console.log(`Incomplete tasks from previous session:`);
+        console.log(`[Jr] Incomplete tasks from previous session:`);
         summary.incomplete_tasks.forEach((task, i) => {
           console.log(`  ${i + 1}. ${task}`);
         });
@@ -58,7 +58,7 @@ export class SessionManager {
         };
 
         await this.writeSummary(newSummary);
-        console.log(`New session started: ${newSummary.session_id}`);
+        console.log(`[Jr] New session started: ${newSummary.session_id}`);
 
         return newSummary;
       } else {
@@ -76,10 +76,10 @@ export class SessionManager {
 
     await this.writeSummary(summary);
 
-    console.log(`Session ${summary.session_id} finalized`);
-    console.log(`Duration: ${this.calculateDuration(summary.start_time, summary.end_time)}`);
-    console.log(`Accomplished tasks: ${summary.accomplished.length}`);
-    console.log(`System health: ${summary.system_health}`);
+    console.log(`[Jr] Session ${summary.session_id} finalized`);
+    console.log(`[Jr] Duration: ${this.calculateDuration(summary.start_time, summary.end_time)}`);
+    console.log(`[Jr] Accomplished tasks: ${summary.accomplished.length}`);
+    console.log(`[Jr] System health: ${summary.system_health}`);
   }
 
   /**

@@ -16,6 +16,7 @@ import { ClaudeSpecialist } from './agents/ClaudeSpecialist';
 import { Critic } from './agents/Critic';
 import { Architect } from './agents/Architect';
 import { RepairAgent } from './agents/RepairAgent';
+import { LogicArchivist } from './agents/LogicArchivist';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 
@@ -39,6 +40,11 @@ export interface PipelineResult {
   };
   filesWritten?: string[];
   repairAttempts?: number;
+  documentation?: {
+    functionsDocumented: number;
+    commentsAdded: number;
+    darkCodeFixed: number;
+  };
 }
 
 export class Pipeline {
@@ -52,15 +58,18 @@ export class Pipeline {
   private critic: Critic;
   private architect: Architect;
   private repairAgent: RepairAgent;
+  private logicArchivist: LogicArchivist;
   private enableCritic: boolean;
   private enableArchitect: boolean;
+  private enableDocumentation: boolean;
   private maxRepairAttempts: number = 3;
 
   constructor(
     workingDir: string = process.cwd(),
     useMCP: boolean = true,
     enableCritic: boolean = true,
-    enableArchitect: boolean = true
+    enableArchitect: boolean = true,
+    enableDocumentation: boolean = true
   ) {
 
     // Initialize infrastructure
@@ -90,48 +99,60 @@ export class Pipeline {
     this.critic = new Critic(this.stateManager);
     this.architect = new Architect(workingDir, this.stateManager);
     this.repairAgent = new RepairAgent(this.stateManager, this.logger, workingDir);
+    this.logicArchivist = new LogicArchivist();
     this.enableCritic = enableCritic;
     this.enableArchitect = enableArchitect;
+    this.enableDocumentation = enableDocumentation;
   }
 
   /**
    * Execute a task through the complete pipeline
    * @param task Task description
+   * @param forceAgent Optional parameter to force routing to a specific agent
    * @returns Pipeline result
    */
-  async executeTask(task: string): Promise<PipelineResult> {
+  async executeTask(
+    task: string,
+    forceAgent?: 'ollama-specialist' | 'claude-specialist'
+  ): Promise<PipelineResult> {
     const startTime = Date.now();
 
     try {
       // Step 1: Start session
       const session = await this.sessionManager.initialize();
-      console.log(`[Pipeline] Session started: ${session.session_id}`);
+      console.log(`[Jr] Session started: ${session.session_id}`);
 
       // Step 2: Router analyzes complexity
-      console.log(`[Pipeline] Routing task: "${task}"`);
+      console.log(`[Jr] Routing task: "${task}"`);
       const complexityAnalysis = await this.router.analyzeComplexity(task);
       console.log(
-        `[Pipeline] Complexity: ${complexityAnalysis.complexity} (score: ${complexityAnalysis.score})`
+        `[Jr] Complexity: ${complexityAnalysis.complexity} (score: ${complexityAnalysis.score})`
       );
 
       // Step 3: Architect analyzes project structure (if enabled and complex task)
       let architecturalDesign;
       if (this.enableArchitect && complexityAnalysis.complexity === 'complex') {
-        console.log('[Pipeline] Analyzing project architecture...');
+        console.log('[Jr] Analyzing project architecture...');
         architecturalDesign = await this.architect.analyzeProject();
         console.log(
-          `[Pipeline] Architecture: ${architecturalDesign.projectType} (${architecturalDesign.architecturalStyle})`
+          `[Jr] Architecture: ${architecturalDesign.projectType} (${architecturalDesign.architecturalStyle})`
         );
       }
 
       // Step 4: Meta-Coordinator routes to execution agent
       const routingDecision = await this.metaCoordinator.route(
         task,
-        complexityAnalysis.complexity
+        complexityAnalysis.complexity,
+        forceAgent
       );
       console.log(
-        `[Pipeline] Routed to: ${routingDecision.targetAgent} (${routingDecision.reason})`
+        `[Jr] Routed to: ${routingDecision.targetAgent} (${routingDecision.reason})`
       );
+      if (routingDecision.tokenBudgetStatus) {
+        console.log(
+          `[Jr] Token budget: ${routingDecision.tokenBudgetStatus.used}/${routingDecision.tokenBudgetStatus.used + routingDecision.tokenBudgetStatus.remaining} (${routingDecision.tokenBudgetStatus.remaining} remaining)`
+        );
+      }
 
       // Step 5: Execute with appropriate agent
       let executionResult;
@@ -143,7 +164,7 @@ export class Pipeline {
       } else {
         // Fallback to Ollama for unknown agents
         console.log(
-          `[Pipeline] Unknown agent ${routingDecision.targetAgent}, falling back to Ollama`
+          `[Jr] Unknown agent ${routingDecision.targetAgent}, falling back to Ollama`
         );
         executionResult = await this.ollamaSpecialist.execute(task);
       }
@@ -162,17 +183,25 @@ export class Pipeline {
         };
       }
 
-      // Step 6: Repair loop with Critic
+      // Step 6: Prepare for Critic review
+      // BUG-004 FIX: Populate filesWritten BEFORE Critic review so cleanup works on rejection
       let reviewResult;
       let repairAttempts = 0;
       let currentCode = executionResult.output;
       let currentFilePath = executionResult.targetPath || 'generated_code.ts';
       const filesWritten: string[] = [];
 
+      // Add generated files to tracking array immediately after successful execution
+      if (executionResult.generatedFiles && executionResult.generatedFiles.length > 0) {
+        for (const file of executionResult.generatedFiles) {
+          filesWritten.push(file.path);
+        }
+      }
+
       while (repairAttempts <= this.maxRepairAttempts) {
         // Review code with Critic (if enabled)
         if (this.enableCritic) {
-          console.log(`[Pipeline] Reviewing code with Critic (attempt ${repairAttempts + 1})...`);
+          console.log(`[Jr] Reviewing code with Critic (attempt ${repairAttempts + 1})...`);
 
           const codeDiff = [
             {
@@ -185,7 +214,7 @@ export class Pipeline {
 
           reviewResult = await this.critic.reviewCode(codeDiff, task);
           console.log(
-            `[Pipeline] Critic verdict: ${reviewResult.verdict} (${reviewResult.issues.length} issues)`
+            `[Jr] Critic verdict: ${reviewResult.verdict} (${reviewResult.issues.length} issues)`
           );
 
           // Update state with current repair attempt
@@ -194,21 +223,41 @@ export class Pipeline {
 
           // Handle verdict
           if (reviewResult.verdict === 'approved') {
-            // SUCCESS: Record files if they were written
-            if (executionResult.generatedFiles && executionResult.generatedFiles.length > 0) {
-              for (const file of executionResult.generatedFiles) {
-                filesWritten.push(file.path);
-              }
-            }
-
+            // SUCCESS: Files were already added to filesWritten array before review (line 185-189)
             // Update state with written files
             await this.stateManager.updateField('generated_files', filesWritten);
 
-            console.log(`[Pipeline] Code approved. Files written: ${filesWritten.length > 0 ? filesWritten.join(', ') : 'none'}`);
+            console.log(`[Jr] Code approved. Files written: ${filesWritten.length > 0 ? filesWritten.join(', ') : 'none'}`);
+
+            // Step 6.5: Document code with Logic Archivist (if enabled and complexity > 60 or code complexity > 5)
+            if (this.enableDocumentation && (complexityAnalysis.score > 60 || this.calculateCodeComplexity(currentCode) > 5)) {
+              console.log('[Jr] Documenting code with Logic Archivist...');
+
+              const language = this.detectLanguage(currentFilePath);
+              const docResult = await this.logicArchivist.documentCode(
+                currentCode,
+                currentFilePath,
+                language,
+                {
+                  taskComplexity: complexityAnalysis.score,
+                  codeComplexity: this.calculateCodeComplexity(currentCode)
+                }
+              );
+
+              // Update code with documentation
+              currentCode = docResult.documentedCode;
+
+              // Write documented code to file if files were written
+              if (filesWritten.length > 0) {
+                await fs.writeFile(currentFilePath, docResult.documentedCode, 'utf-8');
+                console.log(`[Jr] Documentation added: ${docResult.metrics.functionsDocumented} functions, ${docResult.metrics.commentsAdded} new comments`);
+              }
+            }
+
             break;
           } else if (reviewResult.verdict === 'rejected') {
             // FAILURE: Clean up any files that were written
-            console.error(`[Pipeline] Code rejected: ${reviewResult.summary}`);
+            console.error(`[Jr] Code rejected: ${reviewResult.summary}`);
             await this.cleanupFiles(filesWritten);
 
             await this.sessionManager.addIncompleteTask(task);
@@ -230,7 +279,7 @@ export class Pipeline {
           } else if (reviewResult.verdict === 'needs_repair') {
             // REPAIR: Attempt to fix issues
             if (repairAttempts >= this.maxRepairAttempts) {
-              console.error(`[Pipeline] Max repair attempts (${this.maxRepairAttempts}) exceeded`);
+              console.error(`[Jr] Max repair attempts (${this.maxRepairAttempts}) exceeded`);
               await this.cleanupFiles(filesWritten);
 
               await this.sessionManager.addIncompleteTask(task);
@@ -251,7 +300,7 @@ export class Pipeline {
               };
             }
 
-            console.log(`[Pipeline] Attempting repair (attempt ${repairAttempts + 1})...`);
+            console.log(`[Jr] Attempting repair (attempt ${repairAttempts + 1})...`);
 
             const repairResult = await this.repairAgent.repair(
               reviewResult,
@@ -260,7 +309,7 @@ export class Pipeline {
             );
 
             if (!repairResult.success) {
-              console.error(`[Pipeline] Repair failed: ${repairResult.error}`);
+              console.error(`[Jr] Repair failed: ${repairResult.error}`);
               await this.cleanupFiles(filesWritten);
 
               await this.sessionManager.addIncompleteTask(task);
@@ -285,19 +334,14 @@ export class Pipeline {
             currentCode = repairResult.fixedCode;
             filesWritten.push(...repairResult.filesModified);
 
-            console.log(`[Pipeline] Repair completed. Changes: ${repairResult.changesMade.join(', ')}`);
+            console.log(`[Jr] Repair completed. Changes: ${repairResult.changesMade.join(', ')}`);
 
             repairAttempts++;
             // Loop back to re-review the repaired code
           }
         } else {
-          // Critic disabled, record files if they were written
-          if (executionResult.generatedFiles && executionResult.generatedFiles.length > 0) {
-            for (const file of executionResult.generatedFiles) {
-              filesWritten.push(file.path);
-            }
-            await this.stateManager.updateField('generated_files', filesWritten);
-          }
+          // Critic disabled, files were already added to filesWritten (line 185-189)
+          await this.stateManager.updateField('generated_files', filesWritten);
           break;
         }
       }
@@ -329,7 +373,7 @@ export class Pipeline {
       };
 
       console.log(
-        `[Pipeline] Execution succeeded in ${result.totalDuration}ms (${repairAttempts} repairs)`
+        `[Jr] Execution succeeded in ${result.totalDuration}ms (${repairAttempts} repairs)`
       );
 
       // Step 8: Update session
@@ -338,7 +382,7 @@ export class Pipeline {
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[Pipeline] Error: ${errorMessage}`);
+      console.error(`[Jr] Error: ${errorMessage}`);
 
       await this.logger.logFailure({
         timestamp: new Date().toISOString(),
@@ -367,11 +411,62 @@ export class Pipeline {
     for (const filePath of filePaths) {
       try {
         await fs.unlink(filePath);
-        console.log(`[Pipeline] Cleaned up file: ${filePath}`);
+        console.log(`[Jr] Cleaned up file: ${filePath}`);
       } catch (error) {
-        console.warn(`[Pipeline] Failed to cleanup file ${filePath}:`, error);
+        console.warn(`[Jr] Failed to cleanup file ${filePath}:`, error);
       }
     }
+  }
+
+  /**
+   * Calculate cyclomatic complexity of code
+   * INTENT: Determine if code is complex enough to warrant documentation
+   */
+  private calculateCodeComplexity(code: string): number {
+    let complexity = 1;
+
+    const decisionPatterns = [
+      /\bif\b/g,
+      /\belse\s+if\b/g,
+      /\bfor\b/g,
+      /\bwhile\b/g,
+      /\bcase\b/g,
+      /\bcatch\b/g,
+      /&&/g,
+      /\|\|/g,
+      /\?/g
+    ];
+
+    for (const pattern of decisionPatterns) {
+      const matches = code.match(pattern);
+      if (matches) {
+        complexity += matches.length;
+      }
+    }
+
+    return complexity;
+  }
+
+  /**
+   * Detect programming language from file extension
+   * INTENT: Determine language for proper comment formatting
+   */
+  private detectLanguage(filePath: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    const languageMap: Record<string, string> = {
+      '.ts': 'typescript',
+      '.tsx': 'typescript',
+      '.js': 'javascript',
+      '.jsx': 'javascript',
+      '.py': 'python',
+      '.java': 'java',
+      '.cpp': 'cpp',
+      '.c': 'c',
+      '.go': 'go',
+      '.rs': 'rust'
+    };
+
+    return languageMap[ext] || 'javascript';
   }
 
   /**
