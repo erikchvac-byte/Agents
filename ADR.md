@@ -225,7 +225,7 @@ From code review (HANDOFF.md):
 - `agents/DataExtractor.ts` - Context extraction (Agent 11)
 - `agents/AutoDebug.ts` - Failure analysis (Agent 12)
 - `agents/PerformanceMonitor.ts` - Performance metrics (Agent 13)
-- `agents/RoutingOptimizer.ts` - Routing optimization (Agent 13)
+- `agents/RoutingOptimizer.ts` - Routing optimization (Agent 14)
 - `agents/LogicArchivist.ts` - Documentation generation (Agent 15)
 - `agents/SessionManager.ts` - Session lifecycle (Agent 16)
 
