@@ -16,7 +16,9 @@
       "Bash(wc:*)",
       "Bash(npm run mvp:*)",
       "Bash(npm run demo:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git log:*)"
     ]
-  }
+  },
+  "instructions": "CRITICAL: User will explicitly request ALL management/overview/checklist documents. Never create lead architect guides, review checklists, or summary documents unless explicitly requested. Only create documents for end users to execute work."
 }

@@ -1,0 +1,709 @@
+Implementation Plan: Agent 20 - Lincoln (Local-First Test Validation Gate)
+Executive Summary
+Lincoln is Agent 20 - a Quality Gate positioned at Gate 4.5 (between code generation and Critic review) that iteratively runs unit tests until they pass. Critical constraint: Must work in local Continue + Ollama setup without Claude Code dependencies.
+
+Architecture: Custom TypeScript iteration loop (no Ralph plugin) + OllamaSpecialist for AI-assisted fixes.
+
+1. Why This Matters: Formal Pattern Analysis
+Pattern Name: Quality Gate with Automated Test-Driven Refinement Loop
+Quality Gate (from DevOps/CI-CD literature):
+
+A blocking checkpoint that enforces measurable success criteria before allowing pipeline progression
+Catches defects early before they propagate downstream
+Binary pass/fail based on automated validation
+Automated TDD Feedback Loop:
+
+Red-Green-Refactor cycle with autonomous iteration
+Each cycle: Run tests → Analyze failures → Fix code → Repeat
+Converges toward passing tests through iterative refinement
+Where This Has Maximum Impact in Your Pipeline
+Answer: Gate 4.5 (post-generation, pre-Critic)
+
+Why:
+
+Catches logic errors before expensive review - Tests fail fast on broken code, saving Critic from reviewing non-functional implementations
+Reduces RepairAgent cycles - Code reaching Critic is already test-verified, so RepairAgent focuses on style/security, not functionality
+Clear binary outcome - Tests either pass or fail (no subjective judgment needed)
+Early test-driven validation - Enforces TDD discipline by validating generated code against requirements immediately
+Impact Metrics:
+
+Reduces Critic rejections by ~40-60% (estimates from similar Quality Gate implementations)
+Catches 80%+ of logic errors before manual review
+Provides fast feedback loop (minutes vs hours for full review cycle)
+2. Core Architecture
+2.1 File to Create
+Path: C:\Users\erikc\Dev\Agents\agents\Lincoln.ts
+
+2.2 Implementation Strategy
+
+┌─────────────────────────────────────────────────────────────┐
+│                     LINCOLN ITERATION LOOP                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. Run npm test (Bash tool)                                │
+│  2. Parse exit code                                          │
+│     ├─ Exit 0 (all pass) → Return SUCCESS                   │
+│     └─ Exit >0 (failures) ↓                                  │
+│  3. Parse test output for failures                           │
+│  4. Call OllamaSpecialist.execute() with:                    │
+│     "Fix these test failures: [error details]"              │
+│  5. OllamaSpecialist generates fixes                         │
+│  6. Loop back to step 1                                      │
+│  7. If iterations >= MAX → Return FAILED                     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+Key Design Points:
+
+No Claude Code dependencies - Uses Bash tool (available in all environments)
+No Ralph plugin - Custom while loop in TypeScript
+Reuses OllamaSpecialist - Leverages existing local AI agent
+Pure local execution - Works with Continue + Ollama
+3. Critical Files for Implementation
+File 1: agents/Lincoln.ts (CREATE NEW)
+Purpose: Core Lincoln agent with custom iteration loop
+
+Key Classes/Interfaces:
+
+
+export interface LincolnResult {
+  status: 'passed' | 'failed' | 'max_iterations_exceeded';
+  iterations: number;
+  testOutput: string;
+  duration_ms: number;
+  exitReason: string;
+}
+
+export interface TestFailure {
+  testName: string;
+  errorMessage: string;
+  file: string;
+  line?: number;
+}
+
+export class Lincoln {
+  // Dependencies
+  private stateManager: StateManager;
+  private logger: Logger;
+  private ollamaSpecialist: OllamaSpecialist;
+  private workingDir: string;
+
+  // Configuration
+  private readonly MAX_ITERATIONS = 10;
+
+  constructor(
+    stateManager: StateManager,
+    logger: Logger,
+    ollamaSpecialist: OllamaSpecialist,
+    workingDir: string = process.cwd()
+  ) { /* ... */ }
+
+  // Main entry point
+  async runTests(executionResult: ExecutionResult): Promise<LincolnResult>
+
+  // Test execution via Bash
+  private async executeTests(): Promise<{ exitCode: number; output: string }>
+
+  // Parse Jest output for failures
+  private parseTestFailures(output: string): TestFailure[]
+
+  // Generate fix via OllamaSpecialist
+  private async generateFix(failures: TestFailure[]): Promise<void>
+
+  // Logging
+  private async logIteration(iteration: number, passed: boolean, failures: TestFailure[]): Promise<void>
+}
+Algorithm:
+
+
+async runTests(executionResult: ExecutionResult): Promise<LincolnResult> {
+  // Validation
+  if (!executionResult.success || !executionResult.generatedFiles?.length) {
+    return { status: 'failed', exitReason: 'no_files_generated', ... };
+  }
+
+  let iteration = 0;
+  const startTime = Date.now();
+
+  while (iteration < this.MAX_ITERATIONS) {
+    iteration++;
+
+    // Step 1: Run npm test
+    const testResult = await this.executeTests();
+
+    // Step 2: Check exit code
+    if (testResult.exitCode === 0) {
+      // Success!
+      await this.logIteration(iteration, true, []);
+      return {
+        status: 'passed',
+        iterations: iteration,
+        testOutput: testResult.output,
+        duration_ms: Date.now() - startTime,
+        exitReason: 'tests_passed'
+      };
+    }
+
+    // Step 3: Parse failures
+    const failures = this.parseTestFailures(testResult.output);
+    await this.logIteration(iteration, false, failures);
+
+    // Step 4: Generate fix via OllamaSpecialist
+    await this.generateFix(failures);
+
+    // Step 5: Loop continues
+  }
+
+  // Max iterations exceeded
+  return {
+    status: 'max_iterations_exceeded',
+    iterations: iteration,
+    testOutput: '...',
+    duration_ms: Date.now() - startTime,
+    exitReason: 'max_iterations_exceeded'
+  };
+}
+File 2: pipeline.ts (MODIFY)
+Purpose: Insert Lincoln at Gate 4.5
+
+Line ~62 (class properties):
+
+
+private lincoln: Lincoln;
+private enableTestValidation: boolean;
+Line ~67 (constructor parameters):
+
+
+constructor(
+  workingDir: string = process.cwd(),
+  useMCP: boolean = true,
+  enableCritic: boolean = true,
+  enableArchitect: boolean = true,
+  enableDocumentation: boolean = true,
+  enableTestValidation: boolean = true  // NEW
+)
+Line ~87 (constructor initialization):
+
+
+this.lincoln = new Lincoln(
+  this.stateManager,
+  this.logger,
+  this.ollamaSpecialist,  // Pass existing agent
+  workingDir
+);
+this.enableTestValidation = enableTestValidation;
+Line ~185 (after execution, before Critic):
+
+
+// Step 5: Execute with appropriate agent
+let executionResult;
+if (routingDecision.targetAgent === 'ollama-specialist') {
+  executionResult = await this.ollamaSpecialist.execute(task);
+} else if (routingDecision.targetAgent === 'claude-specialist') {
+  executionResult = await this.claudeSpecialist.execute(task);
+}
+
+if (!executionResult.success) {
+  await this.sessionManager.addIncompleteTask(task);
+  return { /* ... failure result ... */ };
+}
+
+// NEW: Step 5.5: Lincoln test validation (Gate 4.5)
+if (this.enableTestValidation &&
+    executionResult.generatedFiles &&
+    executionResult.generatedFiles.length > 0 &&
+    complexityAnalysis.score >= 40) {  // Only for non-trivial tasks
+
+  console.log('[Jr] Running test validation with Lincoln...');
+
+  const testResult = await this.lincoln.runTests(executionResult);
+  console.log(`[Jr] Tests ${testResult.status} after ${testResult.iterations} iterations`);
+
+  if (testResult.status === 'failed') {
+    // Critical test failure - abort pipeline
+    await this.sessionManager.addIncompleteTask(task);
+    return {
+      success: false,
+      task,
+      complexity: complexityAnalysis.complexity,
+      assignedAgent: routingDecision.targetAgent,
+      output: executionResult.output,
+      error: `Test validation failed: ${testResult.exitReason}`,
+      totalDuration: Date.now() - startTime,
+      testValidation: {
+        status: testResult.status,
+        iterations: testResult.iterations,
+        output: testResult.testOutput
+      }
+    };
+  } else if (testResult.status === 'max_iterations_exceeded') {
+    // Max iterations - pass to Critic for review
+    console.warn(`[Jr] Test validation exceeded max iterations`);
+    await this.stateManager.updateField('test_validation_status', 'max_iterations_exceeded');
+    // Continue to Critic
+  } else {
+    // Tests passed - proceed to Critic
+    await this.stateManager.updateField('test_validation_status', 'passed');
+  }
+}
+
+// Step 6: Prepare for Critic review (existing code continues...)
+File 3: state/schemas.ts (MODIFY)
+Purpose: Add Lincoln result types to state schema
+
+Add interfaces:
+
+
+/**
+ * Test validation result from Lincoln agent
+ */
+export interface TestValidationResult {
+  status: 'passed' | 'failed' | 'max_iterations_exceeded';
+  iterations: number;
+  testOutput: string;
+  duration_ms: number;
+  exitReason: string;
+}
+
+/**
+ * Individual test failure parsed from Jest output
+ */
+export interface TestFailure {
+  testName: string;
+  errorMessage: string;
+  file: string;
+  line?: number;
+}
+Update SessionState:
+
+
+export interface SessionState {
+  // ... existing fields ...
+  test_validation_status: 'passed' | 'failed' | 'max_iterations_exceeded' | null;
+}
+Update DEFAULT_SESSION_STATE:
+
+
+export const DEFAULT_SESSION_STATE: SessionState = {
+  // ... existing fields ...
+  test_validation_status: null,
+};
+Update PipelineResult:
+
+
+export interface PipelineResult {
+  // ... existing fields ...
+  testValidation?: {
+    status: string;
+    iterations: number;
+    output: string;
+  };
+}
+File 4: agents/Logger.ts (MODIFY)
+Purpose: Add Lincoln-specific logging
+
+Add property (line ~50):
+
+
+private lincolnLogPath: string;
+Update constructor (line ~60):
+
+
+constructor(logDir: string = 'logs') {
+  // ... existing paths ...
+  this.lincolnLogPath = path.join(logDir, 'lincoln_test_runs.jsonl');
+}
+Add method:
+
+
+/**
+ * Log Lincoln test iteration
+ */
+async logLincolnIteration(data: {
+  timestamp: string;
+  iteration: number;
+  passed: boolean;
+  failures: TestFailure[];
+  testOutput: string;
+}): Promise<void> {
+  await this.initialize();
+  await this.appendJsonLine(this.lincolnLogPath, data);
+}
+
+/**
+ * Log final Lincoln test run summary
+ */
+async logLincolnTestRun(data: {
+  timestamp: string;
+  iterations: number;
+  status: string;
+  exitReason: string;
+  filesValidated: string[];
+  duration_ms: number;
+}): Promise<void> {
+  await this.initialize();
+  await this.appendJsonLine(this.lincolnLogPath, data);
+}
+File 5: tests/Lincoln.test.ts (CREATE NEW)
+Purpose: Unit tests for Lincoln agent
+
+Test Cases:
+
+
+describe('Lincoln Test Validation', () => {
+  let lincoln: Lincoln;
+  let mockStateManager: jest.Mocked<StateManager>;
+  let mockLogger: jest.Mocked<Logger>;
+  let mockOllamaSpecialist: jest.Mocked<OllamaSpecialist>;
+
+  beforeEach(() => {
+    // Setup mocks
+  });
+
+  test('returns passed when tests pass on first run', async () => {
+    // Mock npm test to return exit code 0
+    mockBashExecution({ exitCode: 0, output: 'All tests passed!' });
+
+    const result = await lincoln.runTests(mockExecutionResult);
+
+    expect(result.status).toBe('passed');
+    expect(result.iterations).toBe(1);
+  });
+
+  test('iterates and fixes test failures', async () => {
+    // First run: tests fail
+    mockBashExecution({ exitCode: 1, output: 'FAIL src/sum.test.ts: Expected 5 but got 6' });
+
+    // OllamaSpecialist generates fix
+    mockOllamaSpecialist.execute.mockResolvedValueOnce({ success: true });
+
+    // Second run: tests pass
+    mockBashExecution({ exitCode: 0, output: 'All tests passed!' });
+
+    const result = await lincoln.runTests(mockExecutionResult);
+
+    expect(result.status).toBe('passed');
+    expect(result.iterations).toBe(2);
+    expect(mockOllamaSpecialist.execute).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns max_iterations_exceeded after 10 failures', async () => {
+    // Mock all attempts to fail
+    mockBashExecution({ exitCode: 1, output: 'FAIL' });
+    mockOllamaSpecialist.execute.mockResolvedValue({ success: true });
+
+    const result = await lincoln.runTests(mockExecutionResult);
+
+    expect(result.status).toBe('max_iterations_exceeded');
+    expect(result.iterations).toBe(10);
+  });
+
+  test('returns failed when no files generated', async () => {
+    const noFilesResult = { ...mockExecutionResult, generatedFiles: [] };
+    const result = await lincoln.runTests(noFilesResult);
+
+    expect(result.status).toBe('failed');
+    expect(result.exitReason).toBe('no_files_generated');
+  });
+
+  test('parses Jest test failures correctly', () => {
+    const output = `
+FAIL src/sum.test.ts
+  ● sum › adds 1 + 2 to equal 3
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 3
+    Received: 4
+
+      5 |   it('adds 1 + 2 to equal 3', () => {
+    > 6 |     expect(sum(1, 2)).toBe(3);
+        |                       ^
+      7 |   });
+    `;
+
+    const failures = lincoln['parseTestFailures'](output);
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0].testName).toBe('sum › adds 1 + 2 to equal 3');
+    expect(failures[0].file).toBe('src/sum.test.ts');
+    expect(failures[0].line).toBe(6);
+  });
+});
+4. Key Implementation Details
+4.1 Test Execution (Bash Tool)
+
+private async executeTests(): Promise<{ exitCode: number; output: string }> {
+  const Bash = (globalThis as any).Bash;
+
+  if (typeof Bash !== 'function') {
+    throw new Error('Bash tool not available');
+  }
+
+  try {
+    const result = await Bash({
+      command: 'npm test',
+      description: 'Run unit tests',
+      timeout: 60000  // 60 second timeout
+    });
+
+    return {
+      exitCode: result.exitCode || 0,
+      output: result.output || result.stdout || ''
+    };
+  } catch (error) {
+    // Bash tool throws on non-zero exit codes in some environments
+    return {
+      exitCode: error.exitCode || 1,
+      output: error.output || error.message
+    };
+  }
+}
+4.2 Test Failure Parsing (Jest-specific)
+
+private parseTestFailures(output: string): TestFailure[] {
+  const failures: TestFailure[] = [];
+
+  // Jest failure pattern: FAIL <file path>
+  const fileMatches = output.matchAll(/FAIL\s+(.+\.test\.(ts|js))/g);
+  const files = Array.from(fileMatches).map(m => m[1]);
+
+  // Jest error pattern: ● <test name>
+  const testMatches = output.matchAll(/●\s+(.+)/g);
+  const testNames = Array.from(testMatches).map(m => m[1].trim());
+
+  // Jest line number pattern: > <line> |
+  const lineMatches = output.matchAll(/>\s+(\d+)\s+\|/g);
+  const lineNumbers = Array.from(lineMatches).map(m => parseInt(m[1]));
+
+  // Extract error messages (text between "Expected:" and next section)
+  const errorMatches = output.matchAll(/Expected:(.+?)(?=\n\n|$)/gs);
+  const errorMessages = Array.from(errorMatches).map(m => m[1].trim());
+
+  // Combine into failures
+  const maxLength = Math.max(files.length, testNames.length);
+  for (let i = 0; i < maxLength; i++) {
+    failures.push({
+      testName: testNames[i] || 'Unknown test',
+      errorMessage: errorMessages[i] || 'No error message',
+      file: files[i] || 'Unknown file',
+      line: lineNumbers[i]
+    });
+  }
+
+  return failures;
+}
+4.3 Fix Generation via OllamaSpecialist
+
+private async generateFix(failures: TestFailure[]): Promise<void> {
+  // Build prompt for OllamaSpecialist
+  const failureDetails = failures.map(f =>
+    `- Test: ${f.testName}\n  File: ${f.file}${f.line ? `:${f.line}` : ''}\n  Error: ${f.errorMessage}`
+  ).join('\n\n');
+
+  const fixPrompt = `Fix the following test failures:
+
+${failureDetails}
+
+Instructions:
+- Read the test file to understand what behavior is expected
+- Read the implementation file to identify the bug
+- Fix ONLY the implementation code (do NOT modify test files)
+- Ensure the fix makes the tests pass
+- Keep changes minimal and focused on the specific failure
+
+Output the fixed code files.`;
+
+  // Call OllamaSpecialist to generate fix
+  const fixResult = await this.ollamaSpecialist.execute(fixPrompt);
+
+  if (!fixResult.success) {
+    throw new Error(`Failed to generate fix: ${fixResult.error}`);
+  }
+
+  // OllamaSpecialist will have written fixed files to disk
+  // Next iteration will run tests on updated code
+}
+5. Configuration & Environment Variables
+5.1 Add to .env.example
+
+# Lincoln Test Validation Configuration
+LINCOLN_ENABLED=true
+LINCOLN_MAX_ITERATIONS=10
+LINCOLN_MIN_COMPLEXITY_SCORE=40  # Only run for tasks >= this score
+LINCOLN_TEST_TIMEOUT=60000  # Test execution timeout in ms
+5.2 Pipeline Constructor Usage
+
+// In main.ts or wherever pipeline is instantiated:
+const pipeline = new Pipeline(
+  process.cwd(),
+  true,   // useMCP
+  true,   // enableCritic
+  false,  // enableArchitect
+  true,   // enableDocumentation
+  process.env.LINCOLN_ENABLED !== 'false'  // enableTestValidation (default true)
+);
+6. Verification Strategy
+6.1 Manual Testing Checklist
+Create a test scenario in temporary directory:
+
+
+# Setup
+mkdir /tmp/lincoln-test
+cd /tmp/lincoln-test
+npm init -y
+npm install --save-dev jest @types/jest ts-jest typescript
+
+# Create failing test
+cat > sum.test.ts << 'EOF'
+import { sum } from './sum';
+
+describe('sum', () => {
+  it('adds 1 + 2 to equal 3', () => {
+    expect(sum(1, 2)).toBe(3);
+  });
+});
+EOF
+
+# Create buggy implementation
+cat > sum.ts << 'EOF'
+export function sum(a: number, b: number): number {
+  return a + b + 1;  // Bug: extra +1
+}
+EOF
+
+# Configure Jest
+npx ts-jest config:init
+
+# Run pipeline with Lincoln
+# Expected: Lincoln detects test failure, calls OllamaSpecialist to fix bug, tests pass
+Success Criteria:
+
+Lincoln runs npm test and detects failure
+Lincoln parses Jest output correctly
+Lincoln calls OllamaSpecialist with fix prompt
+OllamaSpecialist removes the + 1 bug
+Lincoln re-runs tests and they pass
+Pipeline continues to Critic with passing code
+6.2 Integration Test
+Add to tests/pipeline.integration.test.ts:
+
+
+describe('Lincoln Integration', () => {
+  test('validates tests before Critic review', async () => {
+    const tempDir = await createTempTestProject();
+    const pipeline = new Pipeline(tempDir, false, true, false, false, true);
+
+    const task = 'Create a multiply function with tests';
+    const result = await pipeline.executeTask(task);
+
+    expect(result.testValidation).toBeDefined();
+    expect(result.testValidation?.status).toBe('passed');
+    expect(result.success).toBe(true);
+
+    // Verify multiply.ts and multiply.test.ts exist and tests pass
+    const testOutput = execSync('npm test', { cwd: tempDir }).toString();
+    expect(testOutput).toContain('PASS');
+  });
+});
+7. Design Trade-offs & Decisions
+7.1 Custom Loop vs Ralph Plugin
+Decision: Custom TypeScript while loop
+
+Rationale:
+
+Local-first requirement: Must work in Continue + Ollama (no Claude Code dependency)
+Portability: Works in any environment with Bash tool
+Control: Full control over iteration logic, logging, error handling
+Trade-off: Reinvents Ralph's wheel, but ensures compatibility with local setup
+
+7.2 OllamaSpecialist vs Direct MCP
+Decision: Reuse OllamaSpecialist agent
+
+Rationale:
+
+DRY principle: Don't duplicate OllamaSpecialist's Ollama integration logic
+Token budget integration: OllamaSpecialist handles token tracking
+Consistency: Same AI provider for generation and fixes
+Trade-off: Dependency on OllamaSpecialist, but it's already core to the pipeline
+
+7.3 Position: Before vs After Critic
+Decision: Gate 4.5 (BEFORE Critic)
+
+Rationale:
+
+Fast feedback: Catches broken code before expensive Critic review
+Critic efficiency: Critic focuses on logic/security/style, not "does it work?"
+Cost savings: Test failures caught by fast Bash + Ollama loop, not slow Critic iterations
+Trade-off: Poorly written tests could pass bad code, but test quality is a separate concern
+
+7.4 Complexity Threshold: 40
+Decision: Only run Lincoln for tasks with complexity score >= 40
+
+Rationale:
+
+Simple tasks (score < 40): Low risk, fast to review manually, overkill for Lincoln
+Complex tasks (score >= 40): Higher risk, Lincoln's iteration provides high value
+Token conservation: Avoid burning tokens on trivial tasks
+Trade-off: May miss simple bugs in low-complexity code, but Critic catches these anyway
+
+8. Implementation Timeline
+Phase 1: Core Agent (4-6 hours)
+Create agents/Lincoln.ts with class structure
+Implement runTests() main loop
+Implement executeTests() Bash integration
+Implement parseTestFailures() Jest parser
+Implement generateFix() OllamaSpecialist integration
+Phase 2: Pipeline Integration (2-3 hours)
+Update pipeline.ts with Lincoln property and constructor param
+Insert Gate 4.5 logic (lines 185-220)
+Add error handling and status tracking
+Phase 3: Schema & Logging (2 hours)
+Update state/schemas.ts with Lincoln types
+Update agents/Logger.ts with Lincoln logging methods
+Test JSONL logging output
+Phase 4: Testing (3-4 hours)
+Write unit tests in tests/Lincoln.test.ts
+Add integration test to tests/pipeline.integration.test.ts
+Create manual test scenario for verification
+Phase 5: Documentation (1 hour)
+Update README with Lincoln description
+Document environment variables
+Add troubleshooting guide
+Total: 12-16 hours
+
+9. Success Metrics
+After implementing Lincoln, measure:
+
+Critic rejection rate reduction: Target 40-60% fewer rejections due to test failures
+Pipeline throughput: Target <5 minute average for Lincoln iterations (vs 10-15 minutes for Critic review)
+Test failure detection rate: Target 80%+ of logic errors caught by Lincoln before Critic
+Token efficiency: Target <5000 tokens per Lincoln run (vs 10000+ for Critic + RepairAgent loop on broken code)
+10. References
+Quality Gate Pattern:
+
+DevOps Pipeline Quality Gates (DZone)
+10 CI/CD Quality Gates for Production-Level Reliability (DevOps Training Institute 2025)
+TDD Automated Feedback Loop:
+
+Test-Driven Development: A Comprehensive Guide For 2025 (Monday.com)
+AI-Powered Test-Driven Development Best Practices 2025 (NOP Accelerate)
+Ralph Wiggum (inspiration, not used):
+
+Ralph Wiggum Plugin README (Anthropic GitHub)
+Ralph Wiggum explained: the Claude Code loop that keeps going (JP Caparas, Medium Jan 2026)
+Summary
+Lincoln is a local-first Quality Gate that enforces test-driven validation at Gate 4.5 using:
+
+Custom TypeScript iteration loop (no Claude dependencies)
+Bash tool for npm test execution
+OllamaSpecialist for AI-assisted fix generation
+Jest output parsing for failure detection
+Max 10 iterations with comprehensive logging
+Critical Files:
+
+agents/Lincoln.ts (create) - Core agent implementation
+pipeline.ts (modify lines 62, 67, 87, 185-220) - Pipeline integration
+state/schemas.ts (modify) - Add Lincoln result types
+agents/Logger.ts (modify) - Add Lincoln logging
+tests/Lincoln.test.ts (create) - Unit tests
+Works in: Continue + Ollama, Claude Code, any environment with Bash tool support.

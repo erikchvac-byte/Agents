@@ -1,146 +1,303 @@
-import { AgentManager } from './agent-manager';
-import { MCPTool, AgentRequest } from './types';
+import { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-export function createTools(agentManager: AgentManager): Map<string, MCPTool> {
-  const tools = new Map<string, MCPTool>();
-
-  tools.set('execute_task', {
-    name: 'execute_task',
-    description: 'Execute a development task through the multi-agent system',
+export const AGENT_TOOLS: Tool[] = [
+  {
+    name: 'analyze_task_complexity',
+    description: 'Analyzes task complexity using Router agent',
     inputSchema: {
       type: 'object',
       properties: {
         task: {
           type: 'string',
-          description: 'Task description to execute',
-        },
-        priority: {
-          type: 'string',
-          enum: ['low', 'medium', 'high'],
-          description: 'Task priority level',
+          description: 'The task to analyze',
         },
       },
       required: ['task'],
     },
-  });
-
-  tools.set('get_agent_status', {
-    name: 'get_agent_status',
-    description: 'Get the current status of a specific agent',
+  },
+  {
+    name: 'route_task',
+    description: 'Routes a task to appropriate execution agent using MetaCoordinator',
     inputSchema: {
       type: 'object',
       properties: {
-        agent_name: {
+        task: {
           type: 'string',
-          description: 'Name of the agent to query',
+          description: 'The task to route',
+        },
+        complexity: {
+          type: 'string',
+          description: 'Task complexity (simple or complex)',
+        },
+        forceAgent: {
+          type: 'string',
+          description: 'Optional override to force specific agent',
         },
       },
-      required: ['agent_name'],
+      required: ['task', 'complexity'],
     },
-  });
-
-  tools.set('list_agents', {
-    name: 'list_agents',
-    description: 'List all available agents in the system',
+  },
+  {
+    name: 'execute_simple_task',
+    description: 'Executes simple tasks using Ollama local LLM',
     inputSchema: {
       type: 'object',
-      properties: {},
-    },
-  });
-
-  tools.set('get_system_state', {
-    name: 'get_system_state',
-    description: 'Get the current system state',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  });
-
-  tools.set('reset_state', {
-    name: 'reset_state',
-    description: 'Reset the system state to defaults',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  });
-
-  return tools;
-}
-
-export async function handleToolCall(
-  toolName: string,
-  args: any,
-  agentManager: AgentManager
-): Promise<any> {
-  try {
-    let resultText: string;
-
-    switch (toolName) {
-      case 'execute_task': {
-        const request: AgentRequest = {
-          task: args.task,
-          priority: args.priority || 'medium',
-        };
-
-        const result = await agentManager.executeTask(request);
-        resultText = JSON.stringify(result, null, 2);
-        break;
-      }
-
-      case 'get_agent_status': {
-        const status = await agentManager.getAgentStatus(args.agent_name);
-        resultText = JSON.stringify({ agent: args.agent_name, status }, null, 2);
-        break;
-      }
-
-      case 'list_agents': {
-        const agents = await agentManager.listAgents();
-        resultText = JSON.stringify({ agents }, null, 2);
-        break;
-      }
-
-      case 'get_system_state': {
-        const state = await agentManager.getCurrentState();
-        resultText = JSON.stringify(state, null, 2);
-        break;
-      }
-
-      case 'reset_state': {
-        await agentManager.resetState();
-        resultText = JSON.stringify({ success: true, message: 'State reset successfully' }, null, 2);
-        break;
-      }
-
-      default:
-        throw new Error(`Unknown tool: ${toolName}`);
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: resultText,
+      properties: {
+        task: {
+          type: 'string',
+          description: 'The simple task to execute',
         },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(
-            {
-              error: error instanceof Error ? error.message : String(error),
-              tool: toolName,
+      },
+      required: ['task'],
+    },
+  },
+  {
+    name: 'execute_complex_task',
+    description: 'Executes complex tasks using Claude Sonnet',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task: {
+          type: 'string',
+          description: 'The complex task to execute',
+        },
+      },
+      required: ['task'],
+    },
+  },
+  {
+    name: 'review_code',
+    description: 'Reviews code changes for quality, security, and performance issues using Critic agent',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        diffs: {
+          type: 'array',
+          description: 'Array of code diffs to review',
+          items: {
+            type: 'object',
+            properties: {
+              file: { type: 'string' },
+              additions: { type: 'array', items: { type: 'string' } },
+              deletions: { type: 'array', items: { type: 'string' } },
+              context: { type: 'string' },
             },
-            null,
-            2
-          ),
+          },
         },
-      ],
-      isError: true,
-    };
-  }
-}
+        requirements: {
+          type: 'string',
+          description: 'Requirements code should meet',
+        },
+      },
+      required: ['diffs', 'requirements'],
+    },
+  },
+  {
+    name: 'analyze_architecture',
+    description: 'Analyzes project structure and architectural patterns using Architect agent',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_architectural_guidance',
+    description: 'Recommends file structure for new features using Architect agent',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        featureName: {
+          type: 'string',
+          description: 'Name of feature',
+        },
+        featureType: {
+          type: 'string',
+          description: 'Type of feature (agent, component, etc.)',
+        },
+      },
+      required: ['featureName', 'featureType'],
+    },
+  },
+  {
+    name: 'repair_code',
+    description: 'Repairs code issues identified by Critic using RepairAgent',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        review: {
+          type: 'object',
+          description: 'Code review from Critic containing issues to fix',
+        },
+        originalCode: {
+          type: 'string',
+          description: 'Original code that was reviewed',
+        },
+        filePath: {
+          type: 'string',
+          description: 'File path being repaired',
+        },
+      },
+      required: ['review', 'originalCode', 'filePath'],
+    },
+  },
+  {
+    name: 'analyze_error',
+    description: 'Analyzes failure events and identifies root causes using AutoDebug',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        failure: {
+          type: 'object',
+          description: 'Failure event to analyze',
+          properties: {
+            timestamp: { type: 'string' },
+            agent: { type: 'string' },
+            error: { type: 'string' },
+            task: { type: 'string' },
+            retry_count: { type: 'number' },
+          },
+        },
+      },
+      required: ['failure'],
+    },
+  },
+  {
+    name: 'document_code',
+    description: 'Documents code with intent-focused comments using LogicArchivist',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: {
+          type: 'string',
+          description: 'Code to document',
+        },
+        filePath: {
+          type: 'string',
+          description: 'File path of code',
+        },
+        language: {
+          type: 'string',
+          description: 'Programming language (typescript, javascript, python, etc.)',
+        },
+        taskComplexity: {
+          type: 'number',
+          description: 'Task complexity score (0-100)',
+        },
+        codeComplexity: {
+          type: 'number',
+          description: 'Code complexity score',
+        },
+      },
+      required: ['code', 'filePath', 'language'],
+    },
+  },
+  {
+    name: 'analyze_dependencies',
+    description: 'Scans dependencies and generates comprehensive report using DependencyScout',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'extract_data',
+    description: 'Extracts code context from a directory using DataExtractor',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        targetDir: {
+          type: 'string',
+          description: 'Directory to analyze (relative to working directory)',
+        },
+        recursive: {
+          type: 'boolean',
+          description: 'Whether to analyze subdirectories',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_performance_metrics',
+    description: 'Generates comprehensive performance report using PerformanceMonitor',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        lookbackMinutes: {
+          type: 'number',
+          description: 'How far back to analyze in minutes (default: 60)',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'optimize_routing',
+    description: 'Analyzes routing patterns and generates optimization recommendations using RoutingOptimizer',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'start_session',
+    description: 'Initializes session - reads existing or creates new using SessionManager',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'end_session',
+    description: 'Finalizes session on shutdown using SessionManager',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        summary: {
+          type: 'object',
+          description: 'Session summary to finalize',
+        },
+      },
+      required: ['summary'],
+    },
+  },
+  {
+    name: 'get_recent_logs',
+    description: 'Query logs with optional filters using Logger',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Filter by agent name',
+        },
+        start_date: {
+          type: 'string',
+          description: 'Filter by start date (ISO format)',
+        },
+        end_date: {
+          type: 'string',
+          description: 'Filter by end date (ISO format)',
+        },
+        error_type: {
+          type: 'string',
+          description: 'Filter by error type',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'ping',
+    description: 'Test stub - returns OK if MCP server is alive',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+];

@@ -18,7 +18,6 @@ import {
 import { AgentManager } from './agent-manager.js';
 import { AGENT_TOOLS } from './tools.js';
 
-
 /**
  * Main MCP Server Class
  */
@@ -40,7 +39,7 @@ class AgentMCPServer {
       }
     );
 
-    this.agentManager = AgentManager.getInstance(process.cwd());
+    this.agentManager = new AgentManager();
     this.setupHandlers();
   }
 
