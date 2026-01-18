@@ -1,6 +1,6 @@
 import { StateManager } from '../state/StateManager';
 import { Logger } from './Logger';
-import { CodeReview, CodeIssue, SecurityConcern } from './Critic';
+import { CodeReview, CodeIssue, SecurityConcern } from '../state/schemas';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 

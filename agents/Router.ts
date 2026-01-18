@@ -10,13 +10,7 @@
 
 import { StateManager } from '../state/StateManager';
 import { Logger } from './Logger';
-import { TaskComplexity } from '../state/schemas';
-
-export interface ComplexityAnalysis {
-  complexity: TaskComplexity;
-  score: number; // 0-100
-  factors: string[];
-}
+import { TaskComplexity, ComplexityAnalysis } from '../state/schemas';
 
 export class Router {
   private stateManager: StateManager;

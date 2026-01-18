@@ -1,5 +1,12 @@
 import { StateManager } from '../state/StateManager';
-import { ReviewVerdict } from '../state/schemas';
+import {
+  ReviewVerdict,
+  CodeReview,
+  CodeIssue,
+  SecurityConcern,
+  PerformanceIssue,
+  CodeDiff,
+} from '../state/schemas';
 
 /**
  * Critic (Agent 6)
@@ -11,45 +18,6 @@ import { ReviewVerdict } from '../state/schemas';
  * - Identify code smells, security issues, performance problems
  * - Determine: approve, request repair, or escalate
  */
-
-export interface CodeReview {
-  verdict: ReviewVerdict;
-  issues: CodeIssue[];
-  summary: string;
-  recommendations: string[];
-  securityConcerns: SecurityConcern[];
-  performanceIssues: PerformanceIssue[];
-  reviewed_at: string;
-}
-
-export interface CodeIssue {
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  category: 'logic' | 'style' | 'security' | 'performance' | 'maintainability';
-  description: string;
-  location?: string;
-  suggestedFix?: string;
-}
-
-export interface SecurityConcern {
-  type: string; // 'injection', 'xss', 'auth', 'crypto', etc.
-  description: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  recommendation: string;
-}
-
-export interface PerformanceIssue {
-  type: string; // 'n+1', 'memory-leak', 'blocking', etc.
-  description: string;
-  impact: 'high' | 'medium' | 'low';
-  suggestion: string;
-}
-
-export interface CodeDiff {
-  file: string;
-  additions: string[];
-  deletions: string[];
-  context: string;
-}
 
 export class Critic {
   private stateManager: StateManager;

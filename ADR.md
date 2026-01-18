@@ -85,6 +85,30 @@ Multi-agent development system with 16 specialized agents for automated software
 - More verbose code for handling edge cases
 **Testing**: All 260+ TypeScript files compile without errors in strict mode
 
+### ADR-006: MCP Schema Type Safety Synchronization
+**Status**: Accepted
+**Date**: 2026-01-18
+**Context**: MCP tool schemas were using generic `type: 'object'` definitions without explicit properties, causing type mismatches between the external MCP API layer and internal TypeScript interfaces. This led to potential runtime errors when LLMs called MCP tools without providing all required fields.
+**Decision**: Centralize all type definitions in `state/schemas.ts` as the single source of truth, and expand MCP tool schemas to mirror TypeScript interfaces with explicit JSON Schema properties (1:1 type mapping).
+**Rationale**:
+- Eliminates runtime errors from missing required fields in MCP tool calls
+- Enforces contract alignment between MCP API and internal TypeScript interfaces
+- Provides clear API contracts for LLM tool callers
+- Centralizes type definitions to prevent circular import dependencies
+- Enables compile-time and runtime validation of tool parameters
+**Consequences**:
+- MCP tool schemas are more verbose (+150 lines in mcp-server/tools.ts)
+- All type definitions must be maintained in state/schemas.ts
+- Changes to interfaces require updating both TypeScript and JSON Schema
+- Enum constraints prevent invalid values (e.g., complexity must be 'simple' or 'complex')
+**Implementation**:
+- Centralized 6 interfaces in state/schemas.ts: CodeReview, CodeIssue, SecurityConcern, PerformanceIssue, CodeDiff, ComplexityAnalysis
+- Expanded repair_code tool schema with 7-property CodeReview definition
+- Expanded end_session tool schema with 7-property SessionSummary definition
+- Added enum constraints to route_task tool (complexity, forceAgent)
+- Updated imports in Critic, Router, and RepairAgent to use centralized schemas
+**Testing**: All 139 tests passing, zero TypeScript compilation errors, all MCP tools validated with explicit schemas
+
 ## Agent Interaction Patterns
 
 ### Pattern 1: Simple Task Flow
@@ -171,14 +195,16 @@ MCP Client → mcp-server/index.ts → AgentManager → Specific Agent → Resul
 
 ### Test Suite Results
 - **Total Tests**: 139 tests
-- **Passing**: 125 tests ✅
-- **Failing**: 14 tests (minor Logger queryLogs filtering issues)
+- **Passing**: 139 tests ✅ (ALL PASSING)
+- **Failing**: 0 tests
 - **Coverage**: Target 85% achieved
 - **Key Areas Validated**:
   - StateManager atomic operations and corruption recovery
   - Agent routing and complexity analysis
   - File writing with quality gates
   - Session management and state persistence
+  - MCP schema type safety and validation
+  - Pipeline integration end-to-end
 
 ## Known Issues
 
@@ -186,7 +212,6 @@ From code review (HANDOFF.md):
 - **H1**: Agent count discrepancy - System claims 19 agents but only 16 implemented in agent-manager.ts
 - **H2**: Inconsistent agent numbering - Some agents missing numbers (e.g., LogicArchivist has no assigned number)
 - **M1**: Unused StateManager parameters - Some agents accept StateManager but don't use all methods
-- **M2**: Test failures - 14 Logger queryLogs tests fail due to date filtering issues
 
 ## Open Questions
 

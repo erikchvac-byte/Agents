@@ -169,6 +169,69 @@ export interface LogFilter {
 }
 
 /**
+ * Code review result from Critic agent
+ */
+export interface CodeReview {
+  verdict: ReviewVerdict;
+  issues: CodeIssue[];
+  summary: string;
+  recommendations: string[];
+  securityConcerns: SecurityConcern[];
+  performanceIssues: PerformanceIssue[];
+  reviewed_at: string; // ISO 8601 timestamp
+}
+
+/**
+ * Code issue identified by Critic
+ */
+export interface CodeIssue {
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  category: 'logic' | 'style' | 'security' | 'performance' | 'maintainability';
+  description: string;
+  location?: string;
+  suggestedFix?: string;
+}
+
+/**
+ * Security concern identified by Critic
+ */
+export interface SecurityConcern {
+  type: string; // 'injection', 'xss', 'auth', 'crypto', etc.
+  description: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  recommendation: string;
+}
+
+/**
+ * Performance issue identified by Critic
+ */
+export interface PerformanceIssue {
+  type: string; // 'n+1', 'memory-leak', 'blocking', etc.
+  description: string;
+  impact: 'high' | 'medium' | 'low';
+  suggestion: string;
+}
+
+/**
+ * Code diff for review
+ */
+export interface CodeDiff {
+  file: string;
+  additions: string[];
+  deletions: string[];
+  context: string;
+}
+
+/**
+ * Complexity analysis result from Router
+ */
+export interface ComplexityAnalysis {
+  complexity: TaskComplexity;
+  score: number; // 0-100
+  factors: string[];
+}
+
+/**
  * Default/initial session state
  */
 export const DEFAULT_SESSION_STATE: SessionState = {
