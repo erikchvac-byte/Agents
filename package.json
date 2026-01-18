@@ -14,8 +14,8 @@
     "session:end": "ts-node session-manager-cli.ts end",
     "watcher:start": "ts-node agents/Watcher.ts start",
     "mcp:serve": "ts-node mcp-server/index.ts",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "keywords": [
     "multi-agent",
