@@ -1,119 +1,253 @@
-# Agents in the OpenCode Workspace
+# Multi-Agent Development System
 
-This repository uses a small fleet of agentic tools (the "agents") to perform coding tasks within a safe, sandboxed environment. Agents can read, inspect, edit, run commands, search code, manage tasks, and fetch external information as needed. This README explains what each agent does and when to use them.
+A 19-agent specialized system for automated software development with enforced read-only boundaries, quality gates, and MCP server integration.
 
-## What the agents do
+## Quick Start
 
-- **Root Orchestrator (Code Agent)**
-  - The primary agent that interprets user goals, coordinates sub-agents, and sequences work into a plan.
-  - Uses a plan (todowrite) to track tasks and progress.
-  - Executes commands and edits via specialized tools (read, write, edit, bash).
+```bash
+# Initialize a new development session
+npm run session:start
 
-- **Explorer**
-  - Quickly locates files and code regions using glob patterns and file-search heuristics.
-  - Helpful for scoping work, understanding where to apply changes, and identifying dependencies.
+# Run the MVP pipeline (simple task example)
+npm run mvp
 
-- **Editor / Editor-like Tool**
-  - Reads files, applies precise edits, and writes changes back to disk.
-  - Supports surgical changes, preserving indentation and surrounding context.
+# Run full demo pipeline (complex task example)  
+npm run demo
 
-- **Validator (Tests / Lint / Build)**
-  - Runs the project's test suite, linting, and build steps to verify correctness.
-  - Focuses on fast, deterministic feedback (unit tests first, then broader checks).
+# End the current session
+npm run session:end
 
-- **Todo/Plan Manager**
-  - Manages a lightweight task list (using todowrite/todoread).
-  - Breaks work into discrete steps, marks progress, and ensures a single in-progress task at a time.
+# Start MCP server for external tool integration
+npm run mcp:serve
+```
 
-- **Code/Knowledge Fetcher (Web/Search)**
-  - Pulls external documentation or API references when needed (websearch, codesearch, webfetch).
-  - Keeps guidance aligned with current libraries and best practices.
+## Architecture Overview
 
-- **Shell Runner (Bash)**
-  - Executes shell commands in the repository's working directory.
-  - Used for running tests, builds, and ad-hoc tooling.
-  - Sandbox and approval policies apply (see "Sandbox & Approvals").
+The system operates through a coordinated workflow of specialized agents:
 
-## When and how to use them
+```
+User Request → Router → MetaCoordinator → Execution Agent → Quality Gate → File System
+```
 
-- **Clarify your goal.** State the problem you want to solve (e.g., "add a new utility function," "fix a failing test," "optimize a slow component"). The Root Orchestrator will outline a plan.
+### Core Workflow Patterns
 
-- **Plan first.** If the task is multi-step, create a plan with Todolist:
-  - Use the Todo/Plan Manager to write a short, actionable plan (1–7 steps).
-  - Mark steps as in_progress/completed as you execute them.
+#### Simple Task Flow (10-20ms)
+```
+Task → Router (analyze) → MetaCoordinator (route) → OllamaSpecialist (execute) → Logger
+```
+- **Trigger:** Complexity score < 60
+- **Execution:** Local Ollama LLM (free, fast)
+- **Quality:** Basic validation only
 
-- **Code search and discovery.**
-  - Use Explorer to locate files, tests, and related modules before editing.
-  - Use Codesearch/Webfetch if you need external API references or documentation.
+#### Complex Task Flow (100-500ms)
+```
+Task → Router → MetaCoordinator → ClaudeSpecialist → Critic → RepairAgent → Files
+```
+- **Trigger:** Complexity score ≥ 60
+- **Execution:** Claude Sonnet API (advanced reasoning)
+- **Quality:** Code review + automated repairs
 
-- **Make precise changes.**
-  - Use Editor to modify specific lines or blocks; keep changes minimal and well-scoped.
-  - Prefer small, testable edits that unblock a test or a feature.
+## Agent Categories
 
-- **Validate locally.**
-  - Run Validator checks: `npm test`, `npm run test:coverage`, and `npm run lint`.
-  - If you introduce a new API or public surface, add or adjust tests accordingly.
+### 🎯 Core Routing (4 agents)
+- **Router** - Task complexity analysis (0-100 scoring)
+- **MetaCoordinator** - Intelligent task routing with token budget awareness
+- **OllamaSpecialist** - Simple task execution via local LLM
+- **ClaudeSpecialist** - Complex task execution via Claude API
 
-- **Approval and sandboxing.**
-  - By default, actions run under workspace-write with network sandboxing and approval on_failure.
-  - For potentially destructive actions (e.g., mass file changes, dependency updates) or network calls, request explicit approval or switch to a mode with broader permissions.
+### 🔍 Quality Assurance (4 agents)
+- **Critic** - Code review for security, performance, and style
+- **Architect** - Project structure analysis and guidance
+- **RepairAgent** - Automated bug fixes and issue resolution
+- **AutoDebug** - Failure analysis and root cause identification
 
-- **Documentation and sharing.**
-  - Update AGENTS.md or README snippets to reflect any new conventions or tooling changes.
-  - When ready, summarize changes and rationale for PRs or handoffs.
+### 📚 Documentation & Analysis (3 agents)
+- **LogicArchivist** - Intent-focused code documentation
+- **DependencyScout** - Comprehensive dependency scanning
+- **DataExtractor** - Context extraction from directories
 
-## Quick-start workflows
+### 📊 Monitoring & Optimization (3 agents)
+- **PerformanceMonitor** - System metrics and optimization reports
+- **RoutingOptimizer** - ML-based routing pattern analysis
+- **Watcher** - Filesystem monitoring and change detection
 
-- **Workflow A: Add a small utility**
-  1. Define the goal (e.g., create `src/utils/formatDate.ts`).
-  2. Explorer: locate related utilities and tests.
-  3. Editor: implement the function with tests.
-  4. Validator: run `npm test` and `npm run lint`.
-  5. Optional: add a brief JSDoc/TSDoc comment.
-  6. Todo: mark task complete.
+### 🛠️ Infrastructure (5 agents)
+- **SessionManager** - Session lifecycle and persistence
+- **Logger** - Comprehensive event logging and querying
+- **StateManager** - Atomic state management and corruption recovery
+- **TokenBudget** - API usage tracking and limits
+- **Ping** - Health check and system status
 
-- **Workflow B: Fix a failing test**
-  1. Run tests to reproduce the failure.
-  2. Explorer: open the failing test and the implicated module.
-  3. Editor: implement a minimal fix; re-run tests.
-  4. Validator: run full test suite and lint.
-  5. If needed, add a targeted test for the edge case.
+## MCP Server Integration
 
-- **Workflow C: Documentation/help**
-  1. Use WebFetch or WebSearch to gather relevant docs.
-  2. Editor: add/adjust docs (README, AGENTS.md, inline code comments).
-  3. Validator: ensure type correctness and basic build.
+All 19 agents are exposed as MCP tools with standardized schemas:
 
-## Practical guidelines
+```bash
+# Available via MCP protocol
+analyze_task_complexity    # Router
+route_task                 # MetaCoordinator  
+execute_simple_task         # OllamaSpecialist
+execute_complex_task        # ClaudeSpecialist
+review_code                # Critic
+analyze_architecture       # Architect
+repair_code                # RepairAgent
+analyze_error              # AutoDebug
+document_code              # LogicArchivist
+analyze_dependencies       # DependencyScout
+extract_data               # DataExtractor
+get_performance_metrics     # PerformanceMonitor
+optimize_routing           # RoutingOptimizer
+start_session              # SessionManager
+end_session                # SessionManager
+get_recent_logs            # Logger
+ping                       # Health check
+```
 
-- Keep edits surgical and well-justified; minimize risk to unrelated code.
-- Prefer explicit types over `any`; document non-obvious decisions.
-- Write descriptive test names; aim for deterministic tests.
-- Do not commit secrets or large binaries; follow repository conventions.
-- When in doubt, ask for clarification or propose a plan before large edits.
+## Development Commands
 
-## Reference mappings
+### Pipeline Execution
+```bash
+npm run mvp                # Simple task demo (add sum function)
+npm run demo               # Full pipeline demo
+npm run session:start      # Initialize/resume development session
+npm run session:end        # Finalize current session
+```
 
-- `read`: read a file
-- `write`: write content to a file
-- `edit`: apply precise replacements in a file
-- `glob`: search for files by pattern
-- `grep`: search file contents
-- `bash`: run shell commands
-- `todowrite`: create/update plan steps
-- `todoread`: read plan steps
-- `websearch` / `codesearch`: fetch documentation and code examples
-- `webfetch`: fetch content from URLs
-- `task`: invoke specialized agents with a prompt
+### MCP Server
+```bash
+npm run mcp:serve          # Start MCP server on stdio
+```
 
-## Example prompts (patterns)
+### Development Tools
+```bash
+npm run build              # TypeScript compilation
+npm test                   # Run Jest test suite
+npm run test:coverage      # Tests with coverage (85% threshold)
+npm run test:watch         # Watch mode for development
+npm run lint               # ESLint with TypeScript
+npm run lint:fix           # Auto-fix linting issues
+```
 
-- "Plan to refactor the X module for readability and safety."
-- "Find all usages of function `foo` in the codebase."
-- "Add a unit test for the new feature Y."
-- "Update README to reflect the new API surface."
-- "Run tests and show failures; then propose fixes."
+## Session Management
 
-## Conclusion
+Sessions provide persistent state across development activities:
 
-These agents are designed to work together to get you from goal to validated change quickly and safely. Start with a clear goal, use a concise plan, and let the explorers, editors, and validators do the heavy lifting within safe sandboxing.
+```bash
+# Start a new session
+npm run session:start
+# Output: Session ID: 34833f47-37c5-47e1-9a61-b0a561c42b78
+
+# View session summary
+cat session_summary.json
+# {
+#   "session_id": "34833f47-37c5-47e1-9a61-b0a561c42b78",
+#   "start_time": "2026-01-18T19:28:10.639Z",
+#   "accomplished": [],
+#   "incomplete_tasks": [],
+#   "system_health": "healthy"
+# }
+
+# End session with statistics
+npm run session:end
+# Duration: 0h 0m 6s, Accomplished: 0 tasks, Health: healthy
+```
+
+## Quality Gates & Safety
+
+### Read-Only Boundaries
+- Only execution agents (Ollama/Claude) can write files
+- All other agents are analysis-only
+- Prevents accidental file corruption
+
+### Code Review Process
+- All complex tasks require Critic approval before file writes
+- Three verdicts: **approved**, **needs_repair**, **rejected**
+- Automated repair loop (max 3 attempts)
+
+### Token Budget Management
+- Daily limit: 100,000 tokens
+- Per-agent tracking with automatic budget resets
+- Graceful fallback to Ollama when exhausted
+
+### File Safety Controls
+- Blocks writes to dangerous paths (.git, node_modules)
+- Validates paths are within working directory
+- Prevents path traversal attacks
+
+## Configuration
+
+### OpenCode Integration (`opencode.json`)
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "multi-agent-dev-system": {
+      "type": "local",
+      "command": ["npm", "run", "mcp:serve"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### TypeScript Strict Mode
+All strict flags enabled:
+- `strict` - Full type checking
+- `noUnusedLocals` - No unused variables
+- `noUnusedParameters` - No unused parameters
+- `noImplicitReturns` - Explicit return types
+
+## Example Workflows
+
+### Add a Simple Feature
+```bash
+npm run session:start
+npm run mvp  # Executes: "Add a function to sum two numbers"
+npm run session:end
+```
+*Flow:* Router (simple) → MetaCoordinator → OllamaSpecialist → Files
+
+### Complex Code Generation
+```bash
+npm run session:start  
+npm run demo  # Full pipeline with quality gates
+npm run session:end
+```
+*Flow:* Router (complex) → MetaCoordinator → ClaudeSpecialist → Critic → Files
+
+### External Tool Integration
+```bash
+npm run mcp:serve  # Start server
+# Connect via VS Code/Claude Code MCP client
+# Access all 19 agents as tools
+```
+
+## Project Structure
+
+```
+├── agents/              # 19 specialized agents
+├── state/               # State management and schemas  
+├── mcp-server/          # MCP server implementation
+├── utils/               # Shared utilities
+├── tests/               # Jest test suite (139 tests)
+├── session_summary.json # Active session metadata
+└── dist/               # Compiled TypeScript output
+```
+
+## Testing & Validation
+
+- **139 tests** covering core functionality
+- **85% code coverage** threshold enforced
+- **TypeScript strict mode** compilation required
+- **ESLint** code quality validation
+
+All tests pass with the current implementation, ensuring system reliability and correctness.
+
+## Getting Help
+
+- Use `npm run session:start` to initialize your development environment
+- Check `AGENTS.md` for detailed build/test conventions
+- Run `npm run demo` to see the full system in action
+- Connect via MCP for external tool integration
+
+The multi-agent system provides a safe, efficient, and quality-assured approach to automated software development.
