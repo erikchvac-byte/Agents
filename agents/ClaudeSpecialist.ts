@@ -19,6 +19,7 @@ export class ClaudeSpecialist {
   private workingDir: string;
 
   constructor(_stateManager: StateManager, logger: Logger, workingDir: string = process.cwd()) {
+    // stateManager reserved for future state tracking
     this.logger = logger;
     this.workingDir = workingDir;
 

@@ -74,6 +74,7 @@ export class DataExtractor {
   private readonly EXPORT_PATTERN = /export\s+(?:{[^}]+}|[\w*\s,]+)/g;
 
   constructor(_stateManager: StateManager, logger: Logger, workingDir: string = process.cwd()) {
+    // stateManager reserved for future context storage
     this.logger = logger;
     this.workingDir = workingDir;
   }

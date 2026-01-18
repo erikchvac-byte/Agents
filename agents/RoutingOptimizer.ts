@@ -75,6 +75,7 @@ export class RoutingOptimizer {
   private static COMPLEXITY_THRESHOLD = 60;
 
   constructor(_stateManager: StateManager, logger: Logger, _workingDir: string = process.cwd()) {
+    // stateManager reserved for future routing pattern storage
     this.logger = logger;
     this.checkMCPAvailability();
   }

@@ -167,6 +167,7 @@ export class AutoDebug {
   ];
 
   constructor(_stateManager: StateManager, logger: Logger, _workingDir: string = process.cwd()) {
+    // stateManager reserved for future error pattern storage
     this.logger = logger;
   }
 

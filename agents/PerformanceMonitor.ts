@@ -59,6 +59,7 @@ export class PerformanceMonitor {
   private readonly MIN_ACCEPTABLE_SUCCESS_RATE = 0.9; // 90%
 
   constructor(_stateManager: StateManager, logger: Logger, _workingDir: string = process.cwd()) {
+    // stateManager reserved for future metrics persistence
     this.logger = logger;
   }
 
