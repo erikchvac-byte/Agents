@@ -104,7 +104,12 @@ export class OllamaSpecialist {
       const output = await this.executeWithOllama(task);
 
       // GATE 1: Validate Ollama response quality
-      const responseCheck = await verifyOllamaResponse(output, Date.now() - startTime);
+      const tempResult: ExecutionResult = {
+        success: true,
+        output,
+        duration_ms: Date.now() - startTime,
+      };
+      const responseCheck = await verifyOllamaResponse(tempResult);
       if (!responseCheck.passed) {
         throw new Error(`Gate-1 failed: ${responseCheck.error}`);
       }

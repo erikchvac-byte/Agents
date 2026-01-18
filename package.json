@@ -13,6 +13,7 @@
     "session:start": "ts-node agents/SessionManager.ts start",
     "session:end": "ts-node agents/SessionManager.ts end",
     "watcher:start": "ts-node agents/Watcher.ts start",
+    "mcp:serve": "ts-node mcp-server/index.ts",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix"
   },
@@ -37,6 +38,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "chokidar": "^3.5.3",
     "dotenv": "^17.2.3",
     "uuid": "^9.0.1"

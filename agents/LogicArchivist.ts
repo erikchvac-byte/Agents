@@ -66,6 +66,8 @@ export class LogicArchivist {
       existingComments?: string[];
     }
   ): Promise<DocumentedCodeResult> {
+    void filePath;
+
     // Analyze code structure
     const sections = this.analyzeCodeSections(code, language);
 
@@ -299,6 +301,7 @@ export class LogicArchivist {
    * INTENT: Detect complex conditional blocks (>3 branches)
    */
   private detectComplexConditionals(lines: string[], language: string): CodeSection[] {
+    void language;
     const sections: CodeSection[] = [];
     let currentConditional: { startLine: number; branches: number } | null = null;
 
@@ -378,6 +381,7 @@ export class LogicArchivist {
    * INTENT: Detect magic numbers and constants
    */
   private detectMagicNumbers(lines: string[], language: string): CodeSection[] {
+    void language;
     const sections: CodeSection[] = [];
     const magicNumberPattern = /=\s*(\d{3,}|\d+\.\d+)/; // Numbers with 3+ digits or decimals
 
@@ -408,6 +412,8 @@ export class LogicArchivist {
     taskComplexity?: number,
     codeComplexity?: number
   ): boolean {
+    void codeComplexity;
+
     // Always document if task complexity > 60
     if (taskComplexity && taskComplexity > 60) return true;
 
@@ -664,6 +670,7 @@ export class LogicArchivist {
     originalCode: string,
     documentedCode: string
   ): DocumentationMetrics {
+    void allSections;
     const originalCommentCount = (originalCode.match(/\/\/|\/\*|#/g) || []).length;
     const newCommentCount = (documentedCode.match(/\/\/|\/\*|#/g) || []).length;
 
@@ -682,13 +689,15 @@ export class LogicArchivist {
 
     const added = documentedSections.filter(s => !s.existingComment).length;
 
+    void added;
+
     return {
       functionsDocumented,
       complexSectionsDocumented: complexSections,
-      commentsAdded: added,
+      commentsAdded: newCommentCount - originalCommentCount,
       commentsUpdated: updated,
       commentsPreserved: preserved,
-      darkCodeFixed: added + updated
+      darkCodeFixed: 0
     };
   }
 
