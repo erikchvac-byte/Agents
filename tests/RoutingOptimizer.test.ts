@@ -11,6 +11,65 @@ describe('RoutingOptimizer Agent', () => {
   let logger: Logger;
   let tempDir: string;
 
+  // Mock MCP functions
+  const mockDecisions: any[] = [];
+
+  const mockLogRoutingDecision = async (params: any) => {
+    mockDecisions.push(params);
+    return { logged: true };
+  };
+
+  const mockGetRoutingStats = async () => {
+    const ollamaDecisions = mockDecisions.filter((d: any) => d.actualChoice === 'ollama');
+    const claudeDecisions = mockDecisions.filter((d: any) => d.actualChoice === 'claude');
+
+    const ollamaSuccessCount = ollamaDecisions.filter((d: any) => d.factors?.success === true).length;
+    const claudeSuccessCount = claudeDecisions.filter((d: any) => d.factors?.success === true).length;
+
+    const ollamaSuccessRate = ollamaDecisions.length > 0 ? ollamaSuccessCount / ollamaDecisions.length : 0;
+    const claudeSuccessRate = claudeDecisions.length > 0 ? claudeSuccessCount / claudeDecisions.length : 0;
+
+    return {
+      total_decisions: mockDecisions.length,
+      ollama_count: ollamaDecisions.length,
+      claude_count: claudeDecisions.length,
+      override_rate: 0,
+      score_distribution: {} as Record<string, number>,
+      ollama_success_rate: ollamaSuccessRate,
+      claude_success_rate: claudeSuccessRate,
+      avg_ollama_time: ollamaDecisions.length > 0
+        ? ollamaDecisions.reduce((sum: number, d: any) => sum + (d.factors?.executionTime || 0), 0) / ollamaDecisions.length
+        : 0,
+      avg_claude_time: claudeDecisions.length > 0
+        ? claudeDecisions.reduce((sum: number, d: any) => sum + (d.factors?.executionTime || 0), 0) / claudeDecisions.length
+        : 0,
+    };
+  };
+
+  const mockAnalyzeRoutingPatterns = async () => {
+    const ollamaDecisions = mockDecisions.filter((d: any) => d.actualChoice === 'ollama');
+    const ollamaSuccessCount = ollamaDecisions.filter((d: any) => d.factors?.success).length;
+    const ollamaSuccessRate = ollamaDecisions.length > 0 ? ollamaSuccessCount / ollamaDecisions.length : 0;
+
+    const suggestions: string[] = [];
+    if (mockDecisions.length < 20) {
+      suggestions.push('Insufficient data for pattern analysis');
+    } else {
+      suggestions.push('Analyze routing effectiveness');
+      suggestions.push('Consider adjusting threshold');
+    }
+
+    if (ollamaDecisions.length > 0 && ollamaSuccessRate < 0.5) {
+      suggestions.push('Ollama success rate is critically low');
+    }
+
+    return {
+      suggestions,
+      optimal_threshold: mockDecisions.length >= 20 ? 65 : undefined,
+      confidence: mockDecisions.length >= 20 ? 0.8 : 0.5,
+    };
+  };
+
   beforeEach(async () => {
     // Create temp directory for test
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'routing-test-'));
@@ -23,12 +82,22 @@ describe('RoutingOptimizer Agent', () => {
 
     stateManager = new StateManager(stateDir);
     logger = new Logger(logsDir);
+
+    // Mock MCP functions on global scope
+    (global as any).mcp__ollama_local__log_routing_decision = mockLogRoutingDecision;
+    (global as any).mcp__ollama_local__get_routing_stats = mockGetRoutingStats;
+    (global as any).mcp__ollama_local__analyze_routing_patterns = mockAnalyzeRoutingPatterns;
+
     routingOptimizer = new RoutingOptimizer(stateManager, logger, tempDir);
   });
 
   afterEach(async () => {
     // Clean up
     await fs.rm(tempDir, { recursive: true, force: true });
+    mockDecisions.length = 0;
+    delete (global as any).mcp__ollama_local__log_routing_decision;
+    delete (global as any).mcp__ollama_local__get_routing_stats;
+    delete (global as any).mcp__ollama_local__analyze_routing_patterns;
   });
 
   describe('logDecision', () => {
@@ -185,12 +254,24 @@ describe('RoutingOptimizer Agent', () => {
   });
 
   describe('getStats', () => {
-    test('should return null when MCP unavailable', async () => {
-      // MCP is not available in test environment
+    test('should return routing stats', async () => {
+      // Log some decisions first
+      await routingOptimizer.logDecision({
+        task: 'Test task',
+        complexity: 30,
+        classification: 'simple',
+        chosenAgent: 'ollama-specialist',
+        executionTime: 15,
+        success: true,
+        timestamp: new Date().toISOString(),
+      });
+
       const stats = await routingOptimizer.getStats();
 
-      // Should return null since MCP functions aren't available
-      expect(stats).toBeNull();
+      expect(stats).not.toBeNull();
+      expect(stats?.total_decisions).toBe(1);
+      expect(stats?.ollama_count).toBe(1);
+      expect(stats?.claude_count).toBe(0);
     });
   });
 

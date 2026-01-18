@@ -66,7 +66,7 @@ export class DataExtractor {
 
   // Regex patterns for extraction
   private readonly FUNCTION_PATTERN = /(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)(?:\s*:\s*([^{]+))?/g;
-  private readonly ARROW_FUNCTION_PATTERN = /(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\(([^)]*)\)(?:\s*:\s*([^=>]+))?\s*=>/g;
+  private readonly ARROW_FUNCTION_PATTERN = /(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\(([^)]*)\)(?:\s*:\s*(.+?)(?=\s*=>))?\s*=>/g;
   private readonly INTERFACE_PATTERN = /(?:export\s+)?interface\s+(\w+)\s*{([^}]*)}/g;
   private readonly TYPE_PATTERN = /(?:export\s+)?type\s+(\w+)\s*=\s*([^;]+);?/g;
   private readonly CLASS_PATTERN = /(?:export\s+)?class\s+(\w+)(?:\s+extends\s+\w+)?(?:\s+implements\s+[\w,\s]+)?\s*{/g;

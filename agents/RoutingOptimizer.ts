@@ -178,12 +178,12 @@ export class RoutingOptimizer {
       const patterns = await globalAny.mcp__ollama_local__analyze_routing_patterns();
 
       // Calculate success rates (if available in stats)
-      const ollamaSuccessRate = stats.ollama_success_rate || 0.95;
-      const claudeSuccessRate = stats.claude_success_rate || 0.98;
+      const ollamaSuccessRate = stats.ollama_success_rate ?? 0.95;
+      const claudeSuccessRate = stats.claude_success_rate ?? 0.98;
 
       // Calculate average times (if available)
-      const avgOllamaTime = stats.avg_ollama_time || 15;
-      const avgClaudeTime = stats.avg_claude_time || 300;
+      const avgOllamaTime = stats.avg_ollama_time ?? 15;
+      const avgClaudeTime = stats.avg_claude_time ?? 300;
 
       const analysis: RoutingAnalysis = {
         totalDecisions: stats.total_decisions || 0,

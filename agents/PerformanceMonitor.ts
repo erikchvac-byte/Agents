@@ -194,12 +194,13 @@ export class PerformanceMonitor {
     const samples: ExecutionSample[] = [];
 
     for (const activity of activities) {
-      if (activity.agent && activity.duration_ms !== undefined) {
+      const entry = typeof activity === 'string' ? JSON.parse(activity) : activity;
+      if (entry.agent && entry.duration_ms !== undefined) {
         samples.push({
-          agent: activity.agent,
-          duration_ms: activity.duration_ms,
-          timestamp: activity.timestamp,
-          success: !activity.error,
+          agent: entry.agent,
+          duration_ms: entry.duration_ms,
+          timestamp: entry.timestamp,
+          success: !entry.error,
         });
       }
     }
