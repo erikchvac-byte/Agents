@@ -57,7 +57,7 @@ describe('Pipeline Integration Test', () => {
     // ASSERT - Verify performance
     // Ollama E2E execution includes network overhead, typically 5-6s for simple tasks
     expect(result.totalDuration).toBeLessThan(7000); // Should complete in < 7s
-  }, 15000); // 15 second timeout for Ollama E2E execution
+  }, 25000); // 25 second timeout for Ollama E2E execution
 
   test('state persists correctly', async () => {
     // ARRANGE
